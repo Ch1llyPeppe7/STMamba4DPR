@@ -1,0 +1,353 @@
+06 Nov 00:45    INFO  ['/home/chillypepper/anaconda3/envs/mamba4rec/lib/python3.8/site-packages/ipykernel_launcher.py', '--f=/home/chillypepper/.local/share/jupyter/runtime/kernel-v34f9941815221e9f4a95b8cd0b937fb8005639839.json']
+06 Nov 00:45    INFO  
+General Hyper Parameters:
+gpu_id = 0
+use_gpu = True
+seed = 2020
+state = INFO
+reproducibility = True
+data_path = dataset/foursquare_NYC
+checkpoint_dir = saved
+show_progress = True
+save_dataset = False
+dataset_save_path = None
+save_dataloaders = False
+dataloaders_save_path = None
+log_wandb = False
+
+Training Hyper Parameters:
+epochs = 300
+train_batch_size = 1024
+learner = adam
+learning_rate = 0.001
+train_neg_sample_args = {'distribution': 'none', 'sample_num': 'none', 'alpha': 'none', 'dynamic': False, 'candidate_num': 0}
+eval_step = 1
+stopping_step = 10
+clip_grad_norm = None
+weight_decay = 0.0
+loss_decimal_place = 4
+
+Evaluation Hyper Parameters:
+eval_args = {'split': {'LS': 'valid_and_test'}, 'order': 'TO', 'group_by': 'user', 'mode': {'valid': 'full', 'test': 'full'}}
+repeatable = True
+metrics = ['Recall', 'NDCG', 'MRR']
+topk = [20]
+valid_metric = MRR@20
+valid_metric_bigger = True
+eval_batch_size = 4096
+metric_decimal_place = 4
+
+Dataset Hyper Parameters:
+field_separator = 	
+seq_separator =  
+USER_ID_FIELD = user_id
+ITEM_ID_FIELD = venue_id
+RATING_FIELD = rating
+TIME_FIELD = timestamp
+seq_len = None
+LABEL_FIELD = label
+threshold = None
+NEG_PREFIX = neg_
+load_col = {'inter': ['user_id', 'venue_id', 'timestamp'], 'item': ['venue_id', 'venue_category_id', 'venue_category_name', 'latitude', 'longitude']}
+unload_col = None
+unused_col = None
+additional_feat_suffix = None
+rm_dup_inter = None
+val_interval = None
+filter_inter_by_user_or_item = True
+user_inter_num_interval = [0,inf)
+item_inter_num_interval = [0,inf)
+alias_of_user_id = None
+alias_of_item_id = None
+alias_of_entity_id = None
+alias_of_relation_id = None
+preload_weight = None
+normalize_field = None
+normalize_all = None
+ITEM_LIST_LENGTH_FIELD = item_length
+LIST_SUFFIX = _list
+MAX_ITEM_LIST_LENGTH = 200
+POSITION_FIELD = position_id
+HEAD_ENTITY_ID_FIELD = head_id
+TAIL_ENTITY_ID_FIELD = tail_id
+RELATION_ID_FIELD = relation_id
+ENTITY_ID_FIELD = entity_id
+benchmark_filename = None
+
+Other Hyper Parameters: 
+worker = 0
+wandb_project = recbole
+shuffle = True
+require_pow = False
+enable_amp = False
+enable_scaler = False
+transform = None
+numerical_features = []
+discretization = None
+kg_reverse_r = False
+entity_kg_num_interval = [0,inf)
+relation_kg_num_interval = [0,inf)
+MODEL_TYPE = ModelType.SEQUENTIAL
+hidden_size = 128
+num_layers = 1
+dropout_prob = 0.2
+loss_type = CE
+d_state = 32
+d_conv = 4
+expand = 2
+use_foursquare = True
+MODEL_INPUT_TYPE = InputType.POINTWISE
+eval_type = EvaluatorType.RANKING
+single_spec = True
+local_rank = 0
+device = cuda
+valid_neg_sample_args = {'distribution': 'uniform', 'sample_num': 'none'}
+test_neg_sample_args = {'distribution': 'uniform', 'sample_num': 'none'}
+
+
+06 Nov 00:45    INFO  foursquare_NYC
+The number of users: 1084
+Average actions of users: 209.99815327793166
+The number of items: 38334
+Average actions of items: 5.932955938747294
+The number of inters: 227428
+The sparsity of the dataset: 99.45269361912588%
+Remain Fields: ['user_id', 'venue_id', 'timestamp', 'venue_category_id', 'venue_category_name', 'latitude', 'longitude']
+06 Nov 00:45    INFO  [Training]: train_batch_size = [1024] train_neg_sample_args: [{'distribution': 'none', 'sample_num': 'none', 'alpha': 'none', 'dynamic': False, 'candidate_num': 0}]
+06 Nov 00:45    INFO  [Evaluation]: eval_batch_size = [4096] eval_args: [{'split': {'LS': 'valid_and_test'}, 'order': 'TO', 'group_by': 'user', 'mode': {'valid': 'full', 'test': 'full'}}]
+06 Nov 00:45    INFO  Mamba4POI(
+  (item_embedding): Embedding(38334, 128, padding_idx=0)
+  (LayerNorm): LayerNorm((128,), eps=1e-12, elementwise_affine=True)
+  (dropout): Dropout(p=0.2, inplace=False)
+  (mamba_layers): ModuleList(
+    (0): MambaLayer(
+      (mamba): Mamba(
+        (in_proj): Linear(in_features=128, out_features=512, bias=False)
+        (conv1d): Conv1d(256, 256, kernel_size=(4,), stride=(1,), padding=(3,), groups=256)
+        (act): SiLU()
+        (x_proj): Linear(in_features=256, out_features=72, bias=False)
+        (dt_proj): Linear(in_features=8, out_features=256, bias=True)
+        (out_proj): Linear(in_features=256, out_features=128, bias=False)
+      )
+      (dropout): Dropout(p=0.2, inplace=False)
+      (LayerNorm): LayerNorm((128,), eps=1e-12, elementwise_affine=True)
+      (ffn): FeedForward(
+        (w_1): Linear(in_features=128, out_features=512, bias=True)
+        (w_2): Linear(in_features=512, out_features=128, bias=True)
+        (activation): GELU(approximate='none')
+        (dropout): Dropout(p=0.2, inplace=False)
+        (LayerNorm): LayerNorm((128,), eps=1e-12, elementwise_affine=True)
+      )
+    )
+  )
+  (loss_fct): CrossEntropyLoss()
+)
+Trainable parameters: 5168000
+06 Nov 00:45    INFO  FLOPs: 26393728.0
+06 Nov 00:47    INFO  epoch 0 training [time: 122.57s, train loss: 6383.4394]
+06 Nov 00:47    INFO  epoch 0 evaluating [time: 0.24s, valid_score: 0.018400]
+06 Nov 00:47    INFO  valid result: 
+recall@20 : 0.0406    ndcg@20 : 0.0233    mrr@20 : 0.0184
+06 Nov 00:47    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 00:49    INFO  epoch 1 training [time: 126.80s, train loss: 3158.2179]
+06 Nov 00:49    INFO  epoch 1 evaluating [time: 0.21s, valid_score: 0.039500]
+06 Nov 00:49    INFO  valid result: 
+recall@20 : 0.0803    ndcg@20 : 0.0486    mrr@20 : 0.0395
+06 Nov 00:49    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 00:51    INFO  epoch 2 training [time: 116.52s, train loss: 2472.2513]
+06 Nov 00:51    INFO  epoch 2 evaluating [time: 0.19s, valid_score: 0.084400]
+06 Nov 00:51    INFO  valid result: 
+recall@20 : 0.1376    ndcg@20 : 0.0965    mrr@20 : 0.0844
+06 Nov 00:51    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 00:53    INFO  epoch 3 training [time: 117.92s, train loss: 2151.1200]
+06 Nov 00:53    INFO  epoch 3 evaluating [time: 0.19s, valid_score: 0.158300]
+06 Nov 00:53    INFO  valid result: 
+recall@20 : 0.2235    ndcg@20 : 0.1734    mrr@20 : 0.1583
+06 Nov 00:53    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 00:55    INFO  epoch 4 training [time: 117.70s, train loss: 1967.2807]
+06 Nov 00:55    INFO  epoch 4 evaluating [time: 0.21s, valid_score: 0.190500]
+06 Nov 00:55    INFO  valid result: 
+recall@20 : 0.2539    ndcg@20 : 0.2055    mrr@20 : 0.1905
+06 Nov 00:55    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 00:57    INFO  epoch 5 training [time: 117.74s, train loss: 1871.2020]
+06 Nov 00:57    INFO  epoch 5 evaluating [time: 0.21s, valid_score: 0.195400]
+06 Nov 00:57    INFO  valid result: 
+recall@20 : 0.2761    ndcg@20 : 0.2143    mrr@20 : 0.1954
+06 Nov 00:57    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 00:59    INFO  epoch 6 training [time: 120.12s, train loss: 1808.6302]
+06 Nov 00:59    INFO  epoch 6 evaluating [time: 0.20s, valid_score: 0.200500]
+06 Nov 00:59    INFO  valid result: 
+recall@20 : 0.2844    ndcg@20 : 0.2202    mrr@20 : 0.2005
+06 Nov 00:59    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:01    INFO  epoch 7 training [time: 119.35s, train loss: 1760.0258]
+06 Nov 01:01    INFO  epoch 7 evaluating [time: 0.20s, valid_score: 0.206300]
+06 Nov 01:01    INFO  valid result: 
+recall@20 : 0.2992    ndcg@20 : 0.228    mrr@20 : 0.2063
+06 Nov 01:01    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:03    INFO  epoch 8 training [time: 122.40s, train loss: 1719.2252]
+06 Nov 01:03    INFO  epoch 8 evaluating [time: 0.20s, valid_score: 0.212600]
+06 Nov 01:03    INFO  valid result: 
+recall@20 : 0.3102    ndcg@20 : 0.2354    mrr@20 : 0.2126
+06 Nov 01:03    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:05    INFO  epoch 9 training [time: 119.40s, train loss: 1683.2742]
+06 Nov 01:05    INFO  epoch 9 evaluating [time: 0.20s, valid_score: 0.215300]
+06 Nov 01:05    INFO  valid result: 
+recall@20 : 0.3121    ndcg@20 : 0.2384    mrr@20 : 0.2153
+06 Nov 01:05    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:07    INFO  epoch 10 training [time: 120.97s, train loss: 1650.6184]
+06 Nov 01:07    INFO  epoch 10 evaluating [time: 0.20s, valid_score: 0.215800]
+06 Nov 01:07    INFO  valid result: 
+recall@20 : 0.3213    ndcg@20 : 0.2407    mrr@20 : 0.2158
+06 Nov 01:07    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:09    INFO  epoch 11 training [time: 121.41s, train loss: 1620.0026]
+06 Nov 01:09    INFO  epoch 11 evaluating [time: 0.20s, valid_score: 0.216200]
+06 Nov 01:09    INFO  valid result: 
+recall@20 : 0.3232    ndcg@20 : 0.2418    mrr@20 : 0.2162
+06 Nov 01:09    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:11    INFO  epoch 12 training [time: 121.15s, train loss: 1589.9925]
+06 Nov 01:11    INFO  epoch 12 evaluating [time: 0.19s, valid_score: 0.221000]
+06 Nov 01:11    INFO  valid result: 
+recall@20 : 0.3333    ndcg@20 : 0.2475    mrr@20 : 0.221
+06 Nov 01:11    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:13    INFO  epoch 13 training [time: 122.59s, train loss: 1561.5195]
+06 Nov 01:13    INFO  epoch 13 evaluating [time: 0.20s, valid_score: 0.219800]
+06 Nov 01:13    INFO  valid result: 
+recall@20 : 0.3426    ndcg@20 : 0.2487    mrr@20 : 0.2198
+06 Nov 01:15    INFO  epoch 14 training [time: 120.01s, train loss: 1534.3901]
+06 Nov 01:15    INFO  epoch 14 evaluating [time: 0.19s, valid_score: 0.221900]
+06 Nov 01:15    INFO  valid result: 
+recall@20 : 0.349    ndcg@20 : 0.2518    mrr@20 : 0.2219
+06 Nov 01:15    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:17    INFO  epoch 15 training [time: 120.66s, train loss: 1508.3369]
+06 Nov 01:17    INFO  epoch 15 evaluating [time: 0.19s, valid_score: 0.227000]
+06 Nov 01:17    INFO  valid result: 
+recall@20 : 0.361    ndcg@20 : 0.2584    mrr@20 : 0.227
+06 Nov 01:17    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:19    INFO  epoch 16 training [time: 118.36s, train loss: 1481.6438]
+06 Nov 01:19    INFO  epoch 16 evaluating [time: 0.17s, valid_score: 0.229600]
+06 Nov 01:19    INFO  valid result: 
+recall@20 : 0.3703    ndcg@20 : 0.2627    mrr@20 : 0.2296
+06 Nov 01:19    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:21    INFO  epoch 17 training [time: 119.45s, train loss: 1457.1013]
+06 Nov 01:21    INFO  epoch 17 evaluating [time: 0.20s, valid_score: 0.229200]
+06 Nov 01:21    INFO  valid result: 
+recall@20 : 0.3749    ndcg@20 : 0.2635    mrr@20 : 0.2292
+06 Nov 01:23    INFO  epoch 18 training [time: 119.25s, train loss: 1432.9096]
+06 Nov 01:23    INFO  epoch 18 evaluating [time: 0.19s, valid_score: 0.228300]
+06 Nov 01:23    INFO  valid result: 
+recall@20 : 0.3777    ndcg@20 : 0.2635    mrr@20 : 0.2283
+06 Nov 01:25    INFO  epoch 19 training [time: 120.13s, train loss: 1409.5104]
+06 Nov 01:25    INFO  epoch 19 evaluating [time: 0.19s, valid_score: 0.234200]
+06 Nov 01:25    INFO  valid result: 
+recall@20 : 0.3823    ndcg@20 : 0.2689    mrr@20 : 0.2342
+06 Nov 01:25    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:27    INFO  epoch 20 training [time: 120.60s, train loss: 1386.0951]
+06 Nov 01:27    INFO  epoch 20 evaluating [time: 0.20s, valid_score: 0.235000]
+06 Nov 01:27    INFO  valid result: 
+recall@20 : 0.3915    ndcg@20 : 0.2718    mrr@20 : 0.235
+06 Nov 01:27    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:29    INFO  epoch 21 training [time: 118.47s, train loss: 1364.7671]
+06 Nov 01:29    INFO  epoch 21 evaluating [time: 0.19s, valid_score: 0.235600]
+06 Nov 01:29    INFO  valid result: 
+recall@20 : 0.3897    ndcg@20 : 0.2718    mrr@20 : 0.2356
+06 Nov 01:29    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:31    INFO  epoch 22 training [time: 119.46s, train loss: 1343.3992]
+06 Nov 01:31    INFO  epoch 22 evaluating [time: 0.17s, valid_score: 0.236700]
+06 Nov 01:31    INFO  valid result: 
+recall@20 : 0.3934    ndcg@20 : 0.2735    mrr@20 : 0.2367
+06 Nov 01:31    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:33    INFO  epoch 23 training [time: 120.91s, train loss: 1321.8758]
+06 Nov 01:33    INFO  epoch 23 evaluating [time: 0.22s, valid_score: 0.235700]
+06 Nov 01:33    INFO  valid result: 
+recall@20 : 0.397    ndcg@20 : 0.2737    mrr@20 : 0.2357
+06 Nov 01:35    INFO  epoch 24 training [time: 119.70s, train loss: 1301.6582]
+06 Nov 01:35    INFO  epoch 24 evaluating [time: 0.20s, valid_score: 0.239000]
+06 Nov 01:35    INFO  valid result: 
+recall@20 : 0.4017    ndcg@20 : 0.2771    mrr@20 : 0.239
+06 Nov 01:35    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:37    INFO  epoch 25 training [time: 120.36s, train loss: 1281.6179]
+06 Nov 01:37    INFO  epoch 25 evaluating [time: 0.20s, valid_score: 0.236400]
+06 Nov 01:37    INFO  valid result: 
+recall@20 : 0.4044    ndcg@20 : 0.2758    mrr@20 : 0.2364
+06 Nov 01:39    INFO  epoch 26 training [time: 119.61s, train loss: 1262.6513]
+06 Nov 01:39    INFO  epoch 26 evaluating [time: 0.20s, valid_score: 0.238400]
+06 Nov 01:39    INFO  valid result: 
+recall@20 : 0.4146    ndcg@20 : 0.2794    mrr@20 : 0.2384
+06 Nov 01:41    INFO  epoch 27 training [time: 121.00s, train loss: 1244.9089]
+06 Nov 01:41    INFO  epoch 27 evaluating [time: 0.21s, valid_score: 0.242500]
+06 Nov 01:41    INFO  valid result: 
+recall@20 : 0.4192    ndcg@20 : 0.2835    mrr@20 : 0.2425
+06 Nov 01:41    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:43    INFO  epoch 28 training [time: 122.39s, train loss: 1226.0574]
+06 Nov 01:43    INFO  epoch 28 evaluating [time: 0.19s, valid_score: 0.243500]
+06 Nov 01:43    INFO  valid result: 
+recall@20 : 0.4155    ndcg@20 : 0.2836    mrr@20 : 0.2435
+06 Nov 01:43    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:45    INFO  epoch 29 training [time: 121.70s, train loss: 1208.2797]
+06 Nov 01:45    INFO  epoch 29 evaluating [time: 0.17s, valid_score: 0.241400]
+06 Nov 01:45    INFO  valid result: 
+recall@20 : 0.4229    ndcg@20 : 0.2835    mrr@20 : 0.2414
+06 Nov 01:47    INFO  epoch 30 training [time: 121.13s, train loss: 1191.9603]
+06 Nov 01:47    INFO  epoch 30 evaluating [time: 0.21s, valid_score: 0.247000]
+06 Nov 01:47    INFO  valid result: 
+recall@20 : 0.4294    ndcg@20 : 0.2891    mrr@20 : 0.247
+06 Nov 01:47    INFO  Saving current: saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+06 Nov 01:50    INFO  epoch 31 training [time: 121.20s, train loss: 1175.1327]
+06 Nov 01:50    INFO  epoch 31 evaluating [time: 0.21s, valid_score: 0.243400]
+06 Nov 01:50    INFO  valid result: 
+recall@20 : 0.4331    ndcg@20 : 0.2872    mrr@20 : 0.2434
+06 Nov 01:52    INFO  epoch 32 training [time: 122.74s, train loss: 1158.4468]
+06 Nov 01:52    INFO  epoch 32 evaluating [time: 0.21s, valid_score: 0.241000]
+06 Nov 01:52    INFO  valid result: 
+recall@20 : 0.4321    ndcg@20 : 0.2854    mrr@20 : 0.241
+06 Nov 01:54    INFO  epoch 33 training [time: 121.29s, train loss: 1142.7384]
+06 Nov 01:54    INFO  epoch 33 evaluating [time: 0.20s, valid_score: 0.239900]
+06 Nov 01:54    INFO  valid result: 
+recall@20 : 0.4331    ndcg@20 : 0.2848    mrr@20 : 0.2399
+06 Nov 01:56    INFO  epoch 34 training [time: 120.59s, train loss: 1127.0703]
+06 Nov 01:56    INFO  epoch 34 evaluating [time: 0.19s, valid_score: 0.240400]
+06 Nov 01:56    INFO  valid result: 
+recall@20 : 0.4349    ndcg@20 : 0.2856    mrr@20 : 0.2404
+06 Nov 01:58    INFO  epoch 35 training [time: 119.32s, train loss: 1112.6382]
+06 Nov 01:58    INFO  epoch 35 evaluating [time: 0.19s, valid_score: 0.243800]
+06 Nov 01:58    INFO  valid result: 
+recall@20 : 0.4386    ndcg@20 : 0.2888    mrr@20 : 0.2438
+06 Nov 02:00    INFO  epoch 36 training [time: 121.72s, train loss: 1097.5345]
+06 Nov 02:00    INFO  epoch 36 evaluating [time: 0.17s, valid_score: 0.239500]
+06 Nov 02:00    INFO  valid result: 
+recall@20 : 0.4404    ndcg@20 : 0.286    mrr@20 : 0.2395
+06 Nov 02:02    INFO  epoch 37 training [time: 119.36s, train loss: 1083.8792]
+06 Nov 02:02    INFO  epoch 37 evaluating [time: 0.20s, valid_score: 0.242500]
+06 Nov 02:02    INFO  valid result: 
+recall@20 : 0.4395    ndcg@20 : 0.288    mrr@20 : 0.2425
+06 Nov 02:04    INFO  epoch 38 training [time: 119.78s, train loss: 1070.8127]
+06 Nov 02:04    INFO  epoch 38 evaluating [time: 0.21s, valid_score: 0.239300]
+06 Nov 02:04    INFO  valid result: 
+recall@20 : 0.4423    ndcg@20 : 0.2864    mrr@20 : 0.2393
+06 Nov 02:06    INFO  epoch 39 training [time: 120.36s, train loss: 1056.4533]
+06 Nov 02:06    INFO  epoch 39 evaluating [time: 0.19s, valid_score: 0.244400]
+06 Nov 02:06    INFO  valid result: 
+recall@20 : 0.4423    ndcg@20 : 0.29    mrr@20 : 0.2444
+06 Nov 02:08    INFO  epoch 40 training [time: 121.46s, train loss: 1044.1884]
+06 Nov 02:08    INFO  epoch 40 evaluating [time: 0.17s, valid_score: 0.245300]
+06 Nov 02:08    INFO  valid result: 
+recall@20 : 0.4441    ndcg@20 : 0.2911    mrr@20 : 0.2453
+06 Nov 02:10    INFO  epoch 41 training [time: 120.60s, train loss: 1030.2495]
+06 Nov 02:10    INFO  epoch 41 evaluating [time: 0.21s, valid_score: 0.241200]
+06 Nov 02:10    INFO  valid result: 
+recall@20 : 0.4469    ndcg@20 : 0.2887    mrr@20 : 0.2412
+06 Nov 02:10    INFO  Finished training, best eval result in epoch 30
+06 Nov 02:10    INFO  Loading model structure and parameters from saved/Mamba4POI-Nov-06-2024_00-45-41.pth
+Evaluate   :   0%|                                                            | 0/1 [00:00<?, ?it/s]:   0%|                                    | 0/1 [00:00<?, ?it/s, GPU RAM: 4.26 G/5.79 G]: 100%|████████████████████████████| 1/1 [00:00<00:00,  5.19it/s, GPU RAM: 4.26 G/5.79 G]: 100%|████████████████████████████| 1/1 [00:00<00:00,  5.08it/s, GPU RAM: 4.26 G/5.79 G]
+06 Nov 02:10    INFO  The running environment of this training is as follows:
++-------------+----------------+
+| Environment |     Usage      |
++=============+================+
+| CPU         |     1.20 %     |
++-------------+----------------+
+| GPU         | 4.26 G/5.79 G  |
++-------------+----------------+
+| Memory      | 4.20 G/15.46 G |
++-------------+----------------+
+06 Nov 02:10    INFO  best valid : OrderedDict([('recall@20', 0.4294), ('ndcg@20', 0.2891), ('mrr@20', 0.247)])
+06 Nov 02:10    INFO  test result: OrderedDict([('recall@20', 0.4275), ('ndcg@20', 0.2973), ('mrr@20', 0.257)])
