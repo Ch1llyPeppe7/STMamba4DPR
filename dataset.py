@@ -240,23 +240,23 @@ class MyTestDataLoader(AbstractDataLoader):
         """
         super().update_config(config)
         self._init_batch_size_and_step()
-class AbstractSampler(object):
-    """:class:`AbstractSampler` is a abstract class, all sampler should inherit from it. This sampler supports returning
-    a certain number of random value_ids according to the input key_id, and it also supports to prohibit
-    certain key-value pairs by setting used_ids.
 
-    Args:
-        distribution (str): The string of distribution, which is used for subclass.
 
-    Attributes:
-        used_ids (numpy.ndarray): The result of :meth:`get_used_ids`.
-    """
-
-    def __init__(self, distribution, alpha):
+class MySampler(object):
+    def __init__(self, phases, dataset, distribution="uniform", alpha=1.0):
         self.distribution = ""
         self.alpha = alpha
         self.set_distribution(distribution)
         self.used_ids = self.get_used_ids()
+    
+        if not isinstance(phases, list):
+            phases = [phases]
+        self.phases = phases
+        self.dataset = dataset
+        self.uid_field=dataset.uid_field
+        self.iid_field = dataset.iid_field
+        self.user_num = dataset.user_num
+        self.item_num = dataset.item_num
 
     def set_distribution(self, distribution):
         """Set the distribution of sampler.
@@ -269,23 +269,59 @@ class AbstractSampler(object):
             self._build_alias_table()
 
     def _uni_sampling(self, sample_num):
-        """Sample [sample_num] items in the uniform distribution.
-
-        Args:
-            sample_num (int): the number of samples.
-
-        Returns:
-            sample_list (np.array): a list of samples.
-        """
-        raise NotImplementedError("Method [_uni_sampling] should be implemented")
-
+        return np.random.randint(1, self.item_num, sample_num)
+    
     def _get_candidates_list(self):
-        """Get sample candidates list for _pop_sampling()
+                # 假设你有以下用户和物品 ID 列表
+        # 这里 user_ids 和 item_ids 是从数据集中提取的
+        user_ids = torch.tensor(self.dataset.inter_feat[self.uid_field].numpy(), dtype=torch.long)
+        item_ids = torch.tensor(self.dataset.inter_feat[self.iid_field].numpy(), dtype=torch.long)
 
-        Returns:
-            candidates_list (list): a list of candidates id.
-        """
-        raise NotImplementedError("Method [_get_candidates_list] should be implemented")
+        # 将数据迁移到 GPU
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        user_ids = user_ids.to(device)
+        item_ids = item_ids.to(device)
+
+        # 计算用户和物品的最大 ID（用于定义矩阵大小）
+        num_users = user_ids.max().item() + 1
+        num_items = item_ids.max().item() + 1
+
+        # Step 1: 初始化稀疏矩阵
+        # 创建稀疏矩阵的索引和相应的值
+        indices = torch.stack([user_ids, item_ids])  # [2, N] 的索引
+        values = torch.ones_like(user_ids, dtype=torch.float32, device=device)  # 每个交互的值为 1
+
+        # 创建稀疏矩阵（用户与物品的交互矩阵）
+        interaction_matrix_sparse = torch.sparse_coo_tensor(indices, values, (num_users, num_items))
+
+        # Step 2: 初始化权重矩阵
+        # 假设权重矩阵 shape 为 (1, num_items)，在 GPU 上进行初始化
+        weights = torch.rand(1, num_items, device=device)  # 随机初始化权重
+
+        # Step 3: 使用 scatter_add_ 累加交互次数
+        # 创建一个稠密矩阵来存储每个用户对物品的访问次数
+        interaction_matrix_dense = torch.zeros((num_users, num_items), dtype=torch.int32, device=device)
+
+        # 累加交互次数
+        interaction_matrix_dense.scatter_add_(0, indices, torch.ones_like(user_ids, dtype=torch.int32, device=device))
+
+        # Step 4: 将交互矩阵乘以权重矩阵
+        # 将稠密交互矩阵与权重矩阵逐元素相乘
+        weighted_matrix = interaction_matrix_dense * weights  # 逐元素相乘
+
+        # Step 5: 输出加权后的矩阵
+        print("加权后的稠密矩阵：")
+        print(weighted_matrix.cpu())
+
+        # 如果你需要稀疏矩阵（在需要保存空间时），可以将加权矩阵转换为稀疏矩阵
+        # 这里我们先将加权后的矩阵转回稀疏矩阵
+        weighted_sparse_matrix = torch.sparse_coo_tensor(indices, weighted_matrix.flatten(), (num_users, num_items))
+
+        # 输出稀疏矩阵
+        print("加权后的稀疏矩阵：")
+        print(weighted_sparse_matrix)
+
+        return 
 
     def _build_alias_table(self):
         """Build alias table for popularity_biased sampling."""
@@ -359,9 +395,10 @@ class AbstractSampler(object):
     def get_used_ids(self):
         """
         Returns:
-            numpy.ndarray: Used ids. Index is key_id, and element is a set of value_ids.
+            numpy.ndarray: Used item_ids is the same as positive item_ids.
+            Index is user_id, and element is a set of item_ids.
         """
-        raise NotImplementedError("Method [get_used_ids] should be implemented")
+        return np.array([set() for _ in range(self.user_num)])
 
     def sample_by_key_ids(self, key_ids, num):
         """Sampling by key_ids.
@@ -407,57 +444,30 @@ class AbstractSampler(object):
                     ]
                 )
         return torch.tensor(value_ids, dtype=torch.long)
-
-
-class MySampler(AbstractSampler):
-    def __init__(self, phases, dataset, distribution="uniform", alpha=1.0):
-        if not isinstance(phases, list):
-            phases = [phases]
-        self.phases = phases
-        self.dataset = dataset
-
-        self.iid_field = dataset.iid_field
-        self.user_num = dataset.user_num
-        self.item_num = dataset.item_num
-
-        super().__init__(distribution=distribution, alpha=alpha)
-
-    def _uni_sampling(self, sample_num):
-        return np.random.randint(1, self.item_num, sample_num)
-
-    def _get_candidates_list(self):
-        return list(self.dataset.inter_feat[self.iid_field].numpy())
-
-    def get_used_ids(self):
-        """
-        Returns:
-            numpy.ndarray: Used item_ids is the same as positive item_ids.
-            Index is user_id, and element is a set of item_ids.
-        """
-        return np.array([set() for _ in range(self.user_num)])
-
+        
     def sample_by_user_ids(self, user_ids, item_ids, num):
-        """Sampling by user_ids.
+            """Sampling by user_ids.
 
-        Args:
-            user_ids (numpy.ndarray or list): Input user_ids.
-            item_ids (numpy.ndarray or list): Input item_ids.
-            num (int): Number of sampled item_ids for each user_id.
+            Args:
+                user_ids (numpy.ndarray or list): Input user_ids.
+                item_ids (numpy.ndarray or list): Input item_ids.
+                num (int): Number of sampled item_ids for each user_id.
 
-        Returns:
-            torch.tensor: Sampled item_ids.
-            item_ids[0], item_ids[len(user_ids)], item_ids[len(user_ids) * 2], ..., item_id[len(user_ids) * (num - 1)]
-            is sampled for user_ids[0];
-            item_ids[1], item_ids[len(user_ids) + 1], item_ids[len(user_ids) * 2 + 1], ...,
-            item_id[len(user_ids) * (num - 1) + 1] is sampled for user_ids[1]; ...; and so on.
-        """
-        try:
-            self.used_ids = np.array([{i} for i in item_ids])
-            return self.sample_by_key_ids(np.arange(len(user_ids)), num)
-        except IndexError:
-            for user_id in user_ids:
-                if user_id < 0 or user_id >= self.user_num:
-                    raise ValueError(f"user_id [{user_id}] not exist.")
+            Returns:
+                torch.tensor: Sampled item_ids.
+                item_ids[0], item_ids[len(user_ids)], item_ids[len(user_ids) * 2], ..., item_id[len(user_ids) * (num - 1)]
+                is sampled for user_ids[0];
+                item_ids[1], item_ids[len(user_ids) + 1], item_ids[len(user_ids) * 2 + 1], ...,
+                item_id[len(user_ids) * (num - 1) + 1] is sampled for user_ids[1]; ...; and so on.
+            """
+            try:
+                self.used_ids = np.array([{i} for i in item_ids])
+                return self.sample_by_key_ids(np.arange(len(user_ids)), num)
+            except IndexError:
+                for user_id in user_ids:
+                    if user_id < 0 or user_id >= self.user_num:
+                        raise ValueError(f"user_id [{user_id}] not exist.")
+
 
     def set_phase(self, phase):
         """Get the sampler of corresponding phase.
@@ -474,4 +484,3 @@ class MySampler(AbstractSampler):
         new_sampler.phase = phase
         return new_sampler
 
-    
