@@ -41,6 +41,87 @@ from logging import getLogger
 from time import time
 from torch.nn.parallel import DistributedDataParallel
 
+def reciprocal_rarity(category_ids_counts,dim=0):
+    '''
+    parameters:
+        category_ids_counts:tensor quantity of each category for whole users or single user
+        dim:int set dim=1 when category_ids_counts based on whole users
+    notes: This methods is for test and comparation
+    '''
+    reciprocal=1/category_ids_counts
+    reciprocal[0]=0#modify inf
+    return reciprocal/reciprocal.sum(dim)
+
+
+def exp_rarity(category_ids_counts,device,dim=0):
+    '''
+    parameters:
+        category_ids_counts:tensor quantity of each category for whole users or single user
+        dim:int set dim=1 when category_ids_counts based on whole users
+    notes:
+        We use exp to modify the distribution of category quantity,which higly refine 
+    the discrimination of the rarity.We proposed scaling the rich/frequently visited 
+    categories into the slow-changing area while the rare are highly discriminated.    
+    '''
+    #zoom control hyperparameters
+    e1=torch.tensor(0.3,dtype=torch.float64).to(device) #derivative for start point
+    e2=torch.tensor(1,dtype=torch.float64).to(device)  #second derivative for boost point
+    boost=torch.tensor(3,dtype=torch.float64).to(device)
+    a=torch.exp(boost).to(device)
+    p1=torch.log(e1/torch.log(a)/torch.log(a))/torch.log(a)
+    p2=torch.log(e2/torch.log(a)/torch.log(a))/torch.log(a)
+
+    #p1-p2 goes slow after p2 it boost!
+    #compress mins-max into d1-d2 while put mins after e2 which arouse mutaion to distinguish them
+
+    quant=torch.tensor(0.9,dtype=torch.float64).to(device)
+    quantile=torch.quantile(category_ids_counts,quant,dim=dim)
+
+    C=(category_ids_counts.max(dim=dim).values-category_ids_counts)*(p2-p1)/(category_ids_counts.max(dim=dim).values-quantile)+p1
+    #start from p1 boost after p2
+
+    exp=torch.exp(torch.log(a)*C)
+    exp[0]=0
+    return exp/exp.sum(dim=dim)
+
+def counting4all(dataset,device):
+    '''
+    parameters:
+        self:base_sampler offering the whole dataset
+        device:cuda calculation platform
+    return:
+        POI_interaction_matrix     :interactions based on specific places
+        category_interaction_matrix:interactions based on categories
+        category_ids_count         :inherent features of POI based on categories 
+                                    reflected by the quantity distribution of which,
+                                    are to generate the probablity in view of rarity.
+    '''
+    user_ids = torch.tensor(dataset.inter_feat[dataset.uid_field] ,dtype=torch.int32).to(device)
+    item_ids = torch.tensor(dataset.inter_feat[dataset.iid_field], dtype=torch.int32).to(device)
+    category_ids=torch.tensor(dataset.item_feat["venue_category_id"],dtype=torch.int32).to(device)
+    categories=category_ids[item_ids]#broadcast
+
+    num_users = user_ids.max()+1  #start from 1 padding row 0 with 0
+    num_items = item_ids.max()+1  #start from 1 padding column 0 with 0
+    num_category_ids=category_ids.max()+1 #start from 1 padding column 0 with 0
+
+    POI_unique_indices = user_ids * num_items + item_ids
+    category_unique_indices=user_ids*num_category_ids+categories
+
+    POI_counts = torch.bincount(POI_unique_indices, minlength=num_users * num_items)
+    POI_interaction_matrix = POI_counts.reshape(num_users, num_items)
+
+    category_counts=torch.bincount(category_unique_indices, minlength=num_users * num_category_ids)
+    category_interaction_matrix=category_counts.reshape(num_users,num_category_ids)
+
+    category_ids_counts=torch.bincount(category_ids).to(dtype=torch.float64)
+    category_ids_counts[0]=0#category0 for padding
+
+    return POI_interaction_matrix,category_interaction_matrix,category_ids_counts
+
+
+
+
 
 def create_dataset(config):
     """重载的 create_dataset 函数"""
