@@ -3,19 +3,6 @@ import random
 import torch
 
 
-def HyperEdgeList(dataset,device):
-    user_ids = torch.tensor(dataset.inter_feat[dataset.uid_field] ,dtype=torch.int32).to(device)
-    item_ids = torch.tensor(dataset.inter_feat[dataset.iid_field], dtype=torch.int32).to(device)
-    category_ids=torch.tensor(dataset.item_feat["venue_category_id"],dtype=torch.int32).to(device)
-    Xs=torch.tensor(dataset.item_feat["x"],dtype=torch.float32).to(device)
-    Ys=torch.tensor(dataset.item_feat["y"],dtype=torch.float32).to(device)
-    categories=category_ids[item_ids]#broadcast
-    item_Xs=Xs[item_ids]
-    item_Ys=Ys[item_ids]
-    return torch.stack((user_ids,item_ids,categories,item_Xs,item_Ys),dim=1)
-
-
-
 def visualize_3d_hypergraph(HyperEdge, user_ids=None, user_num=1):
     # 确保随机选择指定数量的用户
     unique_user_ids = torch.unique(HyperEdge[:, 0]).cpu().numpy()
