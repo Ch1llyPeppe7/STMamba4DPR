@@ -74,8 +74,6 @@ class FourSquare(SequentialDataset):
 
         # 如果 GPU 可用，将数据移到 GPU 上
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        latitude = latitude.to(device)
-        longitude = longitude.to(device)
             
         del self.item_feat['latitude']
         del self.item_feat['longitude']
@@ -83,14 +81,14 @@ class FourSquare(SequentialDataset):
         self.set_field_property('x', FeatureType.FLOAT, FeatureSource.ITEM, 1)  
         self.set_field_property('y', FeatureType.FLOAT, FeatureSource.ITEM, 1)  
 
-        self.item_feat['x'],self.item_feat['y']= self.lat_lon_to_spherical(latitude, longitude)
+        self.item_feat['x'],self.item_feat['y']= self.lat_lon_to_spherical(latitude, longitude,device)
+        
 
-
-    def lat_lon_to_spherical(self, latitudes, longitudes, radius=6371):
+    def lat_lon_to_spherical(self, latitudes, longitudes, device,radius=6371):
         """将经纬度转换为球面坐标 (x, y)"""
         # 将纬度和经度从度数转换为弧度
-        lat_rad = latitudes * (torch.pi / 180)  
-        lon_rad = longitudes * (torch.pi / 180)  
+        lat_rad = latitudes.to(device) * (torch.pi / 180)  
+        lon_rad = longitudes.to(device) * (torch.pi / 180)  
         
         x = radius * torch.cos(lat_rad) * torch.sin(lon_rad)*1000
         y = radius * torch.cos(lat_rad) * torch.cos(lon_rad)*1000
@@ -103,8 +101,9 @@ class FourSquare(SequentialDataset):
 
         x = torch.round(x).to(torch.int32)
         y = torch.round(y).to(torch.int32)
-        
-        return x.cpu(),y.cpu()
+        x,y=x.cpu(),y.cpu()
+        torch.cuda.empty_cache()
+        return x,y
 
   
 

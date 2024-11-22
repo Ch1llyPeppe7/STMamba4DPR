@@ -2,6 +2,36 @@ import plotly.graph_objects as go
 import random
 import torch
 
+def active_center_point(interaction_matrix,itemX,itemY,device):
+    weight=interaction_matrix.to(device)/interaction_matrix.to(device).sum(dim=0,keepdim=True)
+    itemX=itemX.to(device)
+    itemY=itemY.to(device)
+    center_x,center_y=weight@itemX,weight@itemY
+
+    X=(interaction_matrix!=0).float()@itemX.T
+    Y=(interaction_matrix!=0).float()@itemY.T
+   
+    Xmin,_=X.min(dim=0)
+    Ymin,_=Y.min(dim=0)
+    Xmax,_=X.max(dim=0)
+    Ymax,_=Y.max(dim=0)
+    print(Xmin,Xmax)
+
+    maxDx=(torch.abs(center_x-torch.concat(Xmax,Xmin,dim=1))).max(0)
+    maxDy=(torch.abs(center_y-torch.concat(Ymax,Ymin,dim=1))).max(0)
+
+    radius=maxDx+maxDy
+    
+    return center_x,center_y,radius
+
+def category_interest_similarity(category_interaction_matrix,device):
+    CatMat=category_interaction_matrix.float()+1e-8
+    DM=CatMat/CatMat.sum(dim=1,keepdim=True)#distribution matrix
+    norm=torch.sqrt((DM*DM).sum(0))
+    norm2=norm@norm.T#cosine similarity which measure the similarity of the shape
+    return DM@DM.T/norm2
+
+
 
 def visualize_3d_hypergraph(HyperEdge, user_ids=None, user_num=1):
     # 确保随机选择指定数量的用户
@@ -190,14 +220,14 @@ def counting4all(dataset,device):
     category_unique_indices=user_ids*num_category_ids+categories
 
     POI_counts = torch.bincount(POI_unique_indices, minlength=num_users * num_items)
-    POI_interaction_matrix = POI_counts.reshape(num_users, num_items)
+    POI_interaction_matrix = POI_counts.reshape(num_users, num_items).cpu()
 
     category_counts=torch.bincount(category_unique_indices, minlength=num_users * num_category_ids)
-    category_interaction_matrix=category_counts.reshape(num_users,num_category_ids)
+    category_interaction_matrix=category_counts.reshape(num_users,num_category_ids).cpu()
 
-    category_ids_counts=torch.bincount(category_ids).to(dtype=torch.float64)
+    category_ids_counts=torch.bincount(category_ids).to(dtype=torch.float64).cpu()
     category_ids_counts[0]=0#category0 for padding
-
+    torch.cuda.empty_cache()
     return POI_interaction_matrix,category_interaction_matrix,category_ids_counts
 
 def kurtosis(data):
