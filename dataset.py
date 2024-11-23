@@ -12,6 +12,7 @@ from recbole.utils import (
     set_color,
     ensure_dir,
 )
+from myutils import *
 from recbole.data.dataloader.abstract_dataloader import (
     AbstractDataLoader,NegSampleDataLoader
 )
@@ -52,11 +53,6 @@ def unixTime2periodicVector(unitTime, components=None):
 
 # 定义 FourSquare 类
 class FourSquare(SequentialDataset):
-    """
-    FourSquareSequentialDataset 用于加载和增强 Foursquare 数据集，
-    继承自 RecBole 的 SequentialDataset。
-    """
-
     def __init__(self, config):
         super().__init__(config)
         self.max_seq_length = config["MAX_ITEM_LIST_LENGTH"]
@@ -64,24 +60,23 @@ class FourSquare(SequentialDataset):
         getattr(self,f"{self.iid_field}_list_field", None): self.max_seq_length,
             'time_encoded': 12  # time_encoded 是一个长度为 12 的向量
         }
-        self._change_feat_format()
+        self.set_field_property('latitude', FeatureType.FLOAT, FeatureSource.ITEM, 1)  
+        self.set_field_property('longtitude', FeatureType.FLOAT, FeatureSource.ITEM, 1) 
+
 
         
     def _change_feat_format(self):
-        # 获取经纬度数据，并转换为 torch 张量
+        # 获取经纬度数据，并转换为 torch 张量 
         latitude = torch.tensor(self.item_feat['latitude'].values, dtype=torch.float32)
         longitude = torch.tensor(self.item_feat['longitude'].values, dtype=torch.float32)
 
         # 如果 GPU 可用，将数据移到 GPU 上
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             
-        del self.item_feat['latitude']
-        del self.item_feat['longitude']
 
-        self.set_field_property('x', FeatureType.FLOAT, FeatureSource.ITEM, 1)  
-        self.set_field_property('y', FeatureType.FLOAT, FeatureSource.ITEM, 1)  
+    
 
-        self.item_feat['x'],self.item_feat['y']= self.lat_lon_to_spherical(latitude, longitude,device)
+        self.item_feat['longtitude'],self.item_feat['latitude']= self.lat_lon_to_spherical(latitude, longitude,device)
         
 
     def lat_lon_to_spherical(self, latitudes, longitudes, device,radius=6371):
@@ -239,247 +234,4 @@ class MyTestDataLoader(AbstractDataLoader):
         """
         super().update_config(config)
         self._init_batch_size_and_step()
-
-
-class MySampler(object):
-    def __init__(self, phases, dataset, distribution="uniform", alpha=1.0):
-        self.distribution = ""
-        self.alpha = alpha
-        self.set_distribution(distribution)
-        self.used_ids = self.get_used_ids()
-    
-        if not isinstance(phases, list):
-            phases = [phases]
-        self.phases = phases
-        self.dataset = dataset
-        self.uid_field=dataset.uid_field
-        self.iid_field = dataset.iid_field
-        self.user_num = dataset.user_num
-        self.item_num = dataset.item_num
-
-    def set_distribution(self, distribution):
-        """Set the distribution of sampler.
-
-        Args:
-            distribution (str): Distribution of the negative items.
-        """
-        self.distribution = distribution
-        if distribution == "popularity":
-            self._build_alias_table()
-
-    def _uni_sampling(self, sample_num):
-        return np.random.randint(1, self.item_num, sample_num)
-    
-    def _get_candidates_list(self):
-                # 假设你有以下用户和物品 ID 列表
-        # 这里 user_ids 和 item_ids 是从数据集中提取的
-        user_ids = torch.tensor(self.dataset.inter_feat[self.uid_field].numpy(), dtype=torch.long)
-        item_ids = torch.tensor(self.dataset.inter_feat[self.iid_field].numpy(), dtype=torch.long)
-
-        # 将数据迁移到 GPU
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        user_ids = user_ids.to(device)
-        item_ids = item_ids.to(device)
-
-        # 计算用户和物品的最大 ID（用于定义矩阵大小）
-        num_users = user_ids.max().item() + 1
-        num_items = item_ids.max().item() + 1
-
-        # Step 1: 初始化稀疏矩阵
-        # 创建稀疏矩阵的索引和相应的值
-        indices = torch.stack([user_ids, item_ids])  # [2, N] 的索引
-        values = torch.ones_like(user_ids, dtype=torch.float32, device=device)  # 每个交互的值为 1
-
-        # 创建稀疏矩阵（用户与物品的交互矩阵）
-        interaction_matrix_sparse = torch.sparse_coo_tensor(indices, values, (num_users, num_items))
-
-        # Step 2: 初始化权重矩阵
-        # 假设权重矩阵 shape 为 (1, num_items)，在 GPU 上进行初始化
-        weights = torch.rand(1, num_items, device=device)  # 随机初始化权重
-
-        # Step 3: 使用 scatter_add_ 累加交互次数
-        # 创建一个稠密矩阵来存储每个用户对物品的访问次数
-        interaction_matrix_dense = torch.zeros((num_users, num_items), dtype=torch.int32, device=device)
-
-        # 累加交互次数
-        interaction_matrix_dense.scatter_add_(0, indices, torch.ones_like(user_ids, dtype=torch.int32, device=device))
-
-        # Step 4: 将交互矩阵乘以权重矩阵
-        # 将稠密交互矩阵与权重矩阵逐元素相乘
-        weighted_matrix = interaction_matrix_dense * weights  # 逐元素相乘
-
-        # Step 5: 输出加权后的矩阵
-        print("加权后的稠密矩阵：")
-        print(weighted_matrix.cpu())
-
-        # 如果你需要稀疏矩阵（在需要保存空间时），可以将加权矩阵转换为稀疏矩阵
-        # 这里我们先将加权后的矩阵转回稀疏矩阵
-        weighted_sparse_matrix = torch.sparse_coo_tensor(indices, weighted_matrix.flatten(), (num_users, num_items))
-
-        # 输出稀疏矩阵
-        print("加权后的稀疏矩阵：")
-        print(weighted_sparse_matrix)
-
-        return 
-
-    def _build_alias_table(self):
-        """Build alias table for popularity_biased sampling."""
-        candidates_list = self._get_candidates_list()
-        self.prob = dict(Counter(candidates_list))
-        self.alias = self.prob.copy()
-        large_q = []
-        small_q = []
-        for i in self.prob:
-            self.alias[i] = -1
-            self.prob[i] = self.prob[i] / len(candidates_list)
-            self.prob[i] = pow(self.prob[i], self.alpha)
-        normalize_count = sum(self.prob.values())
-        for i in self.prob:
-            self.prob[i] = self.prob[i] / normalize_count * len(self.prob)
-            if self.prob[i] > 1:
-                large_q.append(i)
-            elif self.prob[i] < 1:
-                small_q.append(i)
-        while len(large_q) != 0 and len(small_q) != 0:
-            l = large_q.pop(0)
-            s = small_q.pop(0)
-            self.alias[s] = l
-            self.prob[l] = self.prob[l] - (1 - self.prob[s])
-            if self.prob[l] < 1:
-                small_q.append(l)
-            elif self.prob[l] > 1:
-                large_q.append(l)
-
-    def _pop_sampling(self, sample_num):
-        """Sample [sample_num] items in the popularity-biased distribution.
-
-        Args:
-            sample_num (int): the number of samples.
-
-        Returns:
-            sample_list (np.array): a list of samples.
-        """
-
-        keys = list(self.prob.keys())
-        random_index_list = np.random.randint(0, len(keys), sample_num)
-        random_prob_list = np.random.random(sample_num)
-        final_random_list = []
-
-        for idx, prob in zip(random_index_list, random_prob_list):
-            if self.prob[keys[idx]] > prob:
-                final_random_list.append(keys[idx])
-            else:
-                final_random_list.append(self.alias[keys[idx]])
-
-        return np.array(final_random_list)
-
-    def sampling(self, sample_num):
-        """Sampling [sample_num] item_ids.
-
-        Args:
-            sample_num (int): the number of samples.
-
-        Returns:
-            sample_list (np.array): a list of samples and the len is [sample_num].
-        """
-        if self.distribution == "uniform":
-            return self._uni_sampling(sample_num)
-        elif self.distribution == "popularity":
-            return self._pop_sampling(sample_num)
-        else:
-            raise NotImplementedError(
-                f"The sampling distribution [{self.distribution}] is not implemented."
-            )
-
-    def get_used_ids(self):
-        """
-        Returns:
-            numpy.ndarray: Used item_ids is the same as positive item_ids.
-            Index is user_id, and element is a set of item_ids.
-        """
-        return np.array([set() for _ in range(self.user_num)])
-
-    def sample_by_key_ids(self, key_ids, num):
-        """Sampling by key_ids.
-
-        Args:
-            key_ids (numpy.ndarray or list): Input key_ids.
-            num (int): Number of sampled value_ids for each key_id.
-
-        Returns:
-            torch.tensor: Sampled value_ids.
-            value_ids[0], value_ids[len(key_ids)], value_ids[len(key_ids) * 2], ..., value_id[len(key_ids) * (num - 1)]
-            is sampled for key_ids[0];
-            value_ids[1], value_ids[len(key_ids) + 1], value_ids[len(key_ids) * 2 + 1], ...,
-            value_id[len(key_ids) * (num - 1) + 1] is sampled for key_ids[1]; ...; and so on.
-        """
-        key_ids = np.array(key_ids)
-        key_num = len(key_ids)
-        total_num = key_num * num
-        if (key_ids == key_ids[0]).all():
-            key_id = key_ids[0]
-            used = np.array(list(self.used_ids[key_id]))
-            value_ids = self.sampling(total_num)
-            check_list = np.arange(total_num)[np.isin(value_ids, used)]
-            while len(check_list) > 0:
-                value_ids[check_list] = value = self.sampling(len(check_list))
-                mask = np.isin(value, used)
-                check_list = check_list[mask]
-        else:
-            value_ids = np.zeros(total_num, dtype=np.int64)
-            check_list = np.arange(total_num)
-            key_ids = np.tile(key_ids, num)
-            while len(check_list) > 0:
-                value_ids[check_list] = self.sampling(len(check_list))
-                check_list = np.array(
-                    [
-                        i
-                        for i, used, v in zip(
-                            check_list,
-                            self.used_ids[key_ids[check_list]],
-                            value_ids[check_list],
-                        )
-                        if v in used
-                    ]
-                )
-        return torch.tensor(value_ids, dtype=torch.long)
-        
-    def sample_by_user_ids(self, user_ids, item_ids, num):
-            """Sampling by user_ids.
-
-            Args:
-                user_ids (numpy.ndarray or list): Input user_ids.
-                item_ids (numpy.ndarray or list): Input item_ids.
-                num (int): Number of sampled item_ids for each user_id.
-
-            Returns:
-                torch.tensor: Sampled item_ids.
-                item_ids[0], item_ids[len(user_ids)], item_ids[len(user_ids) * 2], ..., item_id[len(user_ids) * (num - 1)]
-                is sampled for user_ids[0];
-                item_ids[1], item_ids[len(user_ids) + 1], item_ids[len(user_ids) * 2 + 1], ...,
-                item_id[len(user_ids) * (num - 1) + 1] is sampled for user_ids[1]; ...; and so on.
-            """
-            try:
-                self.used_ids = np.array([{i} for i in item_ids])
-                return self.sample_by_key_ids(np.arange(len(user_ids)), num)
-            except IndexError:
-                for user_id in user_ids:
-                    if user_id < 0 or user_id >= self.user_num:
-                        raise ValueError(f"user_id [{user_id}] not exist.")
-
-
-    def set_phase(self, phase):
-        """Get the sampler of corresponding phase.
-
-        Args:
-            phase (str): The phase of new sampler.
-
-        Returns:
-            Sampler: the copy of this sampler, and :attr:`phase` is set the same as input phase.
-        """
-        if phase not in self.phases:
-            raise ValueError(f"Phase [{phase}] not exist.")
-        new_sampler = copy.copy(self)
-        new_sampler.phase = phase
-        return new_sampler
 

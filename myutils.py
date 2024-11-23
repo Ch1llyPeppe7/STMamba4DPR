@@ -2,27 +2,44 @@ import plotly.graph_objects as go
 import random
 import torch
 
-# def active_center_point(interaction_matrix,itemX,itemY,device):
-#     weight=interaction_matrix.to(device)/interaction_matrix.to(device).sum(dim=0,keepdim=True)
-#     itemX=itemX.to(device)
-#     itemY=itemY.to(device)
-#     center_x,center_y=weight@itemX,weight@itemY
+def user_location_affinity_matrix(center_X,center_Y,width,height,device):
+    xmax=center_X+width
+    xmin=center_X-width
+    ymax=center_Y+height
+    ymin=center_Y-height
 
-#     X=(interaction_matrix!=0).float()@itemX.T
-#     Y=(interaction_matrix!=0).float()@itemY.T
-   
-#     Xmin,_=X.min(dim=0)
-#     Ymin,_=Y.min(dim=0)
-#     Xmax,_=X.max(dim=0)
-#     Ymax,_=Y.max(dim=0)
-#     print(Xmin,Xmax)
+    area=4*width*height
+    UnionArea = area.unsqueeze(1) + area.unsqueeze(0)
 
-#     maxDx=(torch.abs(center_x-torch.concat(Xmax,Xmin,dim=1))).max(0)
-#     maxDy=(torch.abs(center_y-torch.concat(Ymax,Ymin,dim=1))).max(0)
+    crossXmax=torch.min(xmax.unsqueeze(1),xmax.unsqueeze(0))
+    crossXmin=torch.max(xmin.unsqueeze(1),xmin.unsqueeze(0))
 
-#     radius=maxDx+maxDy
+    crossYmax=torch.min(ymax.unsqueeze(1),ymax.unsqueeze(0))
+    crossYmin=torch.max(ymin.unsqueeze(1),ymin.unsqueeze(0))
     
-#     return center_x,center_y,radius
+    intersection_width = torch.clamp(crossXmax - crossXmin, min=0)
+    intersection_height = torch.clamp(crossYmax - crossYmin, min=0)
+    intersection_area = intersection_width * intersection_height
+    
+    return intersection_area/(UnionArea-intersection_area)
+
+def active_center_point(interaction_matrix,uniqueIM,itemX,itemY,device):
+    torch.cuda.empty_cache()
+    weight=interaction_matrix.to(device)/(interaction_matrix.to(device).sum(dim=1,keepdim=True))
+ 
+    center_x,center_y=weight@itemX.to(device).T,weight@itemY.to(device).T
+
+    X=(uniqueIM.to(device)*itemX.to(device))
+    Y=(uniqueIM.to(device)*itemY.to(device))
+
+    weighted_dX=weight*X-weight*center_x.unsqueeze(1)
+    weighted_dY=weight*Y-weight*center_y.unsqueeze(1)
+
+    width=weighted_dX.max(1)[0].cpu()
+    height=weighted_dY.max(1)[0].cpu()
+  
+    
+    return center_x.cpu(),center_y.cpu(),width,height
 
 def category_interest_similarity(category_interaction_matrix,device):
     CatMat=category_interaction_matrix.float()+1e-8
