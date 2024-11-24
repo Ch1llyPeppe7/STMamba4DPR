@@ -1,6 +1,6 @@
 # @Time   : 2024/11/9
 # @Author : Jin Qian
-# @Email  : 22051235@hdu.edu
+# @Email  : chillypepper@foxmail.com
 import copy
 import importlib
 import os
@@ -14,9 +14,8 @@ import torch.optim as optim
 from torch.nn.utils.clip_grad import clip_grad_norm_
 from tqdm import tqdm
 import torch.cuda.amp as amp
-
 from recbole.data.dataloader import *
-from recbole.sampler import KGSampler, Sampler, RepeatableSampler
+from recbole.sampler import KGSampler, Sampler
 from recbole.utils import (
     ModelType,
     ensure_dir,
@@ -328,7 +327,6 @@ def _create_sampler(
     repeatable: bool,
     alpha: float = 1.0,
     base_sampler=None,
-    custom=None
 ):
     phases = ["train", "valid", "test"]
     sampler = None
@@ -344,14 +342,6 @@ def _create_sampler(
                 alpha,
             )
         else:
-            if custom:#自定义阶段隔离负采样
-                sampler=MySampler(
-                phases,
-                dataset,
-                distribution,
-                alpha,
-            )
-            else:
                 sampler = RepeatableSampler(
                     phases,
                     dataset,
@@ -382,16 +372,13 @@ def create_samplers(config, dataset, built_datasets):
     valid_neg_sample_args = config["valid_neg_sample_args"]
     test_neg_sample_args = config["test_neg_sample_args"]
     repeatable = config["repeatable"]
-    if "Use_CustomSampler" in config and config["Use_CustomSampler"]:
-        custom=config["Use_CustomSampler"]
-    else:
-        custom=False
+
     base_sampler = _create_sampler(
         dataset,
         built_datasets,
         train_neg_sample_args["distribution"],
         repeatable,
-        train_neg_sample_args["alpha"],custom
+        train_neg_sample_args["alpha"]
     )
     train_sampler = base_sampler.set_phase("train") if base_sampler else None
 

@@ -1,3 +1,6 @@
+# @Time   : 2024/11/24
+# @Author : Jin Qian
+# @Email  : chillypepper@foxmail.com
 import plotly.graph_objects as go
 import random
 import torch
@@ -20,34 +23,47 @@ def user_location_affinity_matrix(center_X,center_Y,width,height,device):
     intersection_width = torch.clamp(crossXmax - crossXmin, min=0)
     intersection_height = torch.clamp(crossYmax - crossYmin, min=0)
     intersection_area = intersection_width * intersection_height
+  
+    sim=intersection_area/(UnionArea-intersection_area+((UnionArea-intersection_area)==0).float())
     
-    return intersection_area/(UnionArea-intersection_area)
-
+    return sim
 def active_center_point(interaction_matrix,uniqueIM,itemX,itemY,device):
     torch.cuda.empty_cache()
-    weight=interaction_matrix.to(device)/(interaction_matrix.to(device).sum(dim=1,keepdim=True))
- 
-    center_x,center_y=weight@itemX.to(device).T,weight@itemY.to(device).T
+    itemX=itemX.to(device)
+    itemY=itemY.to(device)
+    interaction_matrix=interaction_matrix.to(device)
+    uniqueIM=uniqueIM.to(device)
+    
+    X=(uniqueIM*itemX)
+    Y=(uniqueIM*itemY)
+    Cx=X.sum(1)/((X>0).float().sum(1)+((X>0).float().sum(1)==0).float())
+    Cy=Y.sum(1)/((Y>0).float().sum(1)+((Y>0).float().sum(1)==0).float())
 
-    X=(uniqueIM.to(device)*itemX.to(device))
-    Y=(uniqueIM.to(device)*itemY.to(device))
+    weight=interaction_matrix/(interaction_matrix+(interaction_matrix==0).float()).sum(dim=1,keepdim=True)
 
-    weighted_dX=weight*X-weight*center_x.unsqueeze(1)
-    weighted_dY=weight*Y-weight*center_y.unsqueeze(1)
+    center_x,center_y=Cx+(weight*X).sum(1),Cy+(weight*Y).sum(1)
 
-    width=weighted_dX.max(1)[0].cpu()
-    height=weighted_dY.max(1)[0].cpu()
+    dX=torch.abs(X-center_x.unsqueeze(1))
+    dY=torch.abs(Y-center_y.unsqueeze(1))
+
+    width=dX.max(1)[0].cpu()
+    height=dY.max(1)[0].cpu()
   
     
     return center_x.cpu(),center_y.cpu(),width,height
 
-def category_interest_similarity(category_interaction_matrix,device):
-    CatMat=category_interaction_matrix.float()+1e-8
-    DM=CatMat/CatMat.sum(dim=1,keepdim=True)#distribution matrix
-    norm=torch.sqrt((DM*DM).sum(0))
-    norm2=norm@norm.T#cosine similarity which measure the similarity of the shape
-    return DM@DM.T/norm2
 
+
+def category_interest_similarity(category_interaction_matrix,device):
+    #无法解决冷启动问题 嵌入向量小 找不到相似用户
+    CatMat=category_interaction_matrix.double().to(device)
+    rowsum=CatMat.sum(dim=1,keepdim=True)#distribution matrix
+    DM=CatMat/(rowsum+(rowsum==0).double())
+    norm=torch.sqrt((DM*DM).sum(1))
+    norm2=norm.view(-1,1)@norm.view(1,-1)#cosine similarity which measure the similarity of the shape
+    sim=DM@DM.T/(norm2+(norm2==0).double())
+    sim.fill_diagonal_(1)
+    return sim.cpu()
 
 
 def visualize_3d_hypergraph(HyperEdge, user_ids=None, user_num=1):
@@ -235,7 +251,7 @@ def counting4all(dataset,device):
     num_category_ids=category_ids.max()+1 #start from 1 padding column 0 with 0
 
     
-    unique_POI_IM = torch.zeros(num_users, num_items, dtype=torch.float32, device=device)
+    unique_POI_IM = torch.zeros(num_users, num_items, dtype=torch.float32)
     unique_POI_IM[user_ids, item_ids] = 1 
 
     POI_unique_indices = user_ids * num_items + item_ids

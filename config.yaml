@@ -67,6 +67,9 @@ topk: [20]
 
 eval_args:
   order: TO 
+  spilt: 
+    RS: [0.7,0.1,0.2]
+  gourp_by: user_id
   mode:
     val: labeled
     test: labeled
