@@ -6,13 +6,14 @@ import random
 import torch
 
 def user_location_affinity_matrix(center_X,center_Y,width,height,device):
+    #不同用户对同一用户的相似度在同一尺度上 
     xmax=center_X+width
     xmin=center_X-width
     ymax=center_Y+height
     ymin=center_Y-height
 
     area=4*width*height
-    UnionArea = area.unsqueeze(1) + area.unsqueeze(0)
+    #UnionArea = area.unsqueeze(1) + area.unsqueeze(0)
 
     crossXmax=torch.min(xmax.unsqueeze(1),xmax.unsqueeze(0))
     crossXmin=torch.max(xmin.unsqueeze(1),xmin.unsqueeze(0))
@@ -24,9 +25,11 @@ def user_location_affinity_matrix(center_X,center_Y,width,height,device):
     intersection_height = torch.clamp(crossYmax - crossYmin, min=0)
     intersection_area = intersection_width * intersection_height
   
-    sim=intersection_area/(UnionArea-intersection_area+((UnionArea-intersection_area)==0).float())
+    #sim=intersection_area/(UnionArea-intersection_area+((UnionArea-intersection_area)==0).float())
+    sim=intersection_area/((area+(area==0).float()).unsqueeze(1))
     
     return sim
+
 def active_center_point(interaction_matrix,uniqueIM,itemX,itemY,device):
     torch.cuda.empty_cache()
     itemX=itemX.to(device)

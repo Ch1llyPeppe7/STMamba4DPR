@@ -222,6 +222,9 @@ class FourSquare(SequentialDataset):
         next_df = [self.inter_feat.iloc[index] for index in next_index]
         next_ds = [self.copy(_) for _ in next_df]
         return next_ds
+    
+    def __getitem__(self, idx):
+        return self.inter_feat.iloc[idx] 
 
 class MyTrainDataLoader(NegSampleDataLoader):
     def __init__(self, config, dataset, sampler, shuffle):
@@ -235,13 +238,13 @@ class MyTrainDataLoader(NegSampleDataLoader):
         self.step = self.batch_size 
 
     def collate_fn(self, index):
-        return super()._neg_sampling(self._dataset.inter_feat[index])
+        return self._neg_sampling(self._dataset.inter_feat.iloc[index])
     
     def _neg_sampling(self, inter_feat):
             if self.neg_sample_args.get("dynamic", False):
                 candidate_num = self.neg_sample_args["candidate_num"]
-                user_ids = inter_feat[self.uid_field].numpy()
-                item_ids = inter_feat[self.iid_field].numpy()
+                user_ids = inter_feat[self.uid_field].to_numpy()
+                item_ids = inter_feat[self.iid_field].to_numpy()
                 neg_candidate_ids = self._sampler.sample_by_user_ids(
                     user_ids, item_ids, self.neg_sample_num * candidate_num
                 )
@@ -264,16 +267,14 @@ class MyTrainDataLoader(NegSampleDataLoader):
                 self.neg_sample_args["distribution"] != "none"
                 and self.neg_sample_args["sample_num"] != "none"
             ):
-                user_ids = inter_feat[self.uid_field].numpy()
-                item_ids = inter_feat[self.iid_field].numpy()
+                user_ids = inter_feat[self.uid_field].to_numpy()
+                item_ids = inter_feat[self.iid_field].to_numpy()
                 neg_item_ids = self._sampler.sample_by_user_ids(
                     user_ids, item_ids, self.neg_sample_num
                 )
                 return self.sampling_func(inter_feat, neg_item_ids)
             else:
                 return inter_feat
-
-
 
 
 
@@ -574,10 +575,6 @@ class RepeatableSampler(AbstractSampler):
         super().__init__(distribution=distribution, alpha=alpha)
 
     def used_matrix(self):
-        #threshold for category similarity
-        threshold1=0.5
-        threshold2=0.95
-
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         POI_interaction_matrix,category_interaction_matrix,category_ids_counts,unique_IM=counting4all(self.dataset,device)
         itemX = torch.tensor(self.dataset.item_feat["longitude"], dtype=torch.float32)
@@ -587,13 +584,27 @@ class RepeatableSampler(AbstractSampler):
         catsim=category_interest_similarity(category_interaction_matrix,device)
         locsim=user_location_affinity_matrix(center_X,center_Y,width,height,device)
 
+        #兴趣广度具有冷启动问题
+        StrictCategory_threshold=0.9
+
+        catsim_with_nan = catsim.clone()
+        catsim_with_nan[catsim_with_nan == 0] = float('nan')
+        QuantileCategory_threshold = torch.nanquantile(catsim_with_nan, 0.99, dim=1)#10 most similar user to filter
+
         inter_bool=(POI_interaction_matrix>0).float()
 
-        mask=((locsim>=threshold1)*(catsim>=threshold2)).float()#地理相似且兴趣相似 不然会过滤掉太多样本
+        mask=((locsim<1)*(locsim>=0.95)*(catsim>QuantileCategory_threshold)+((locsim==1)+(locsim==0))*(catsim>StrictCategory_threshold)).float()
 
         result=(mask@inter_bool)>0
 
-        #print((result.sum())/inter_bool.sum()) 潜在已知感兴趣对象增加量 阈值0.5 0.9时增加了50% 0.5 0.93 20%
+        indices=result.nonzero(as_tuple=False)
+            
+        used = [set() for _ in range(result.size(0))]
+        for r, c in indices:
+            used[r.item()].add(c.item())
+        self.used_ids = used
+
+        #print((result.sum())/inter_bool.sum()) 潜在已知感兴趣对象增加量 
 
         
 
@@ -671,7 +682,7 @@ class RepeatableSampler(AbstractSampler):
                         i
                         for i, used, v in zip(
                             check_list,
-                            self.used_ids[key_ids[check_list]],
+                           [self.used_ids[k] for k in key_ids[check_list]],
                             value_ids[check_list],
                         )
                         if v in used
