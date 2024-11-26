@@ -268,18 +268,11 @@ class RandomUserSequenceSampler(Sampler):
         return split_indices
 
     def __iter__(self):
-        """
-        随机打乱序列索引并返回
-        """
         shuffled_indices = np.random.permutation(len(self.splits))
         batches=[]
         for idx in shuffled_indices:
             batches.append(self.splits[idx])
-            if len(batches) == self.batch_size:
-                yield batches  # 返回整个批次
-                batches = []
-        if batches:
-            yield batches
+        yield batches
 
     def __len__(self):
         return len(self.splits)
@@ -509,12 +502,12 @@ class MyTrainDataLoader(NegSampleDataLoader):
         self.step = self._batch_size 
 
     def collate_fn(self, index):
-        index = np.array(index)
         data=[]
-        negs=[]
+        last=[]
         for idx in index:
             data.append(self._dataset[idx])
-            negs.append(self._neg_sampling(self._dataset[idx]))
+            last.append(idx[-1])
+        negs=self._neg_sampling(self.dataset[last])
         return data,negs
         
 
@@ -551,13 +544,20 @@ class MyTrainDataLoader(NegSampleDataLoader):
                 neg_item_ids = self._sampler.sample_by_user_ids(
                     user_ids, item_ids, self.neg_sample_num
                 )
+                print(neg_item_ids)
                 return neg_item_ids#dont mix it
             else:
                 return inter_feat
-    # def __iter__(self):
-    #     self.start_iter = True  
-    #     for indices in self.batch_sampler:
-    #         yield indices
+    def __iter__(self):
+        batches=[]
+        for indices in self.batch_sampler:
+            for indice in indices:
+                batches.append(indice)
+                if len(batches)==self._batch_size:
+                    yield self.collate_fn(batches)
+                    batches=[]
+            if batches:
+                yield self.collate_fn(batches)
 
 
         
@@ -968,7 +968,7 @@ class RepeatableSampler(AbstractSampler):
                         if v in used
                     ]
                 )
-        return torch.tensor(value_ids, dtype=torch.long)
+        return torch.tensor(value_ids, dtype=torch.long).reshape(key_num,num)
 
 
     def set_phase(self, phase):
