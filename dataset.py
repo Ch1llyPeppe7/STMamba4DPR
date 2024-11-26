@@ -263,16 +263,20 @@ class RandomUserSequenceSampler(Sampler):
         # 切分序列
         split_indices = []
         for indices in user_sequences.values():
-            for i in range(0, len(indices), self.seq_len):
-                split_indices.append(indices[i:i + self.seq_len])
+            for i in range(0, len(indices)-self.seq_len+1, max(1,self.seq_len//4)):
+                seq = indices[i:i + self.seq_len]
+                if len(seq) < self.seq_len:
+                    # 不足 seq_len 时，用 0 补充
+                    seq = seq + [0] * (self.seq_len - len(seq))
+                split_indices.append(seq)
         return split_indices
 
-    def __iter__(self):
+    def get_batches(self):
         shuffled_indices = np.random.permutation(len(self.splits))
         batches=[]
         for idx in shuffled_indices:
             batches.append(self.splits[idx])
-        yield batches
+        return batches
 
     def __len__(self):
         return len(self.splits)
@@ -493,23 +497,59 @@ start_iter=False
 class MyTrainDataLoader(NegSampleDataLoader):
     def __init__(self, config, dataset, sampler, shuffle):
         self.sample_size = len(dataset)
-        self._batch_size =config["train_batch_size"] 
+        self.batch_size =config["train_batch_size"] 
         super().__init__(config, dataset, sampler, shuffle)
         super()._set_neg_sample_args(config, dataset, InputType.POINTWISE, config["train_neg_sample_args"])
-   
+        self.itemX=(self.dataset.item_feat["longitude"]).to_numpy()
+        self.itemY=(self.dataset.item_feat["latitude"]).to_numpy()
+        self.itemC=(self.dataset.item_feat["venue_category_id"]).to_numpy()
 
     def _init_batch_size_and_step(self):
-        self.step = self._batch_size 
+        self.step = self.batch_size 
+        self._batch_size=self.batch_size
 
     def collate_fn(self, index):
-        data=[]
+        item_seqs=[]
+        userids=[]
+
+        Xs=[]
+        Ys=[]
+        Cs=[]
+
+        labels=[]
+        iid_field=self._dataset.iid_field
+        uid_field=self._dataset.uid_field
         last=[]
         for idx in index:
-            data.append(self._dataset[idx])
+            items_seq=(self._dataset[idx])[iid_field].to_numpy()
+            item_seqs.append(items_seq)
+
+            Xs.append(self.itemX[items_seq])
+            Ys.append(self.itemY[items_seq])
+            Cs.append(self.itemC[items_seq])
+
+            labels.append((items_seq>0).astype(int))
+
+            userids.append((self._dataset[idx[0]])[uid_field])
+            
             last.append(idx[-1])
+
         negs=self._neg_sampling(self.dataset[last])
-        return data,negs
-        
+       
+
+        return userids,item_seqs,Xs,Ys,Cs,labels
+    
+
+    def __iter__(self):
+        batches=[]
+        indices=self.batch_sampler.get_batches()
+        for indice in indices:
+            batches.append(indice)
+            if len(batches)==self._batch_size:
+                yield self.collate_fn(batches)
+                batches=[]
+        if batches:
+            yield self.collate_fn(batches)    
 
 
     def _neg_sampling(self, inter_feat):
@@ -544,20 +584,10 @@ class MyTrainDataLoader(NegSampleDataLoader):
                 neg_item_ids = self._sampler.sample_by_user_ids(
                     user_ids, item_ids, self.neg_sample_num
                 )
-                print(neg_item_ids)
                 return neg_item_ids#dont mix it
             else:
                 return inter_feat
-    def __iter__(self):
-        batches=[]
-        for indices in self.batch_sampler:
-            for indice in indices:
-                batches.append(indice)
-                if len(batches)==self._batch_size:
-                    yield self.collate_fn(batches)
-                    batches=[]
-            if batches:
-                yield self.collate_fn(batches)
+
 
 
         
