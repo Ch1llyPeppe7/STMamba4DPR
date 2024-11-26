@@ -33,8 +33,9 @@ load_col:
     inter: [user_id, venue_id,venue_id_list,timestamp]
     item: [venue_id,latitude, longitude,venue_category_id]
 
+
 LIST_SUFFIX: "_list"
-MAX_ITEM_LIST_LENGTH: 200
+MAX_ITEM_LIST_LENGTH: 100
 ITEM_LIST_LENGTH_FIELD: venue_seq_len
 
 
@@ -46,9 +47,10 @@ Use_CustomDataloader: True
 repeatable: True  #进行阶段隔离
 NEG_PREFIX: "neg_"
 
+
 # training settings
 epochs: 200
-train_batch_size: 256
+train_batch_size: 4
 learner: adam
 learning_rate: 0.001
 eval_step: 1
@@ -83,7 +85,13 @@ train_neg_sample_args:
   sample_num: 5
 
 valid_neg_sample_args: 
-  distribution: "uniform" 
+  distribution: "popularity" 
+  alpha: 1.0
+  dynamic: False
+  sample_num: 3
+
+test_neg_sample_args: 
+  distribution: "none" 
   alpha: 1.0
   dynamic: False
   sample_num: 3

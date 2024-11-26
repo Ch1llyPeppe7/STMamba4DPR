@@ -199,7 +199,7 @@ def data_preparation(config, dataset):
             )
 
         valid_data = get_dataloader(config, "valid")(
-            config, valid_dataset,train_dataset,valid_sampler, shuffle=False
+            config, valid_dataset,valid_sampler, shuffle=False
         )
         test_data = get_dataloader(config, "test")(
             config, test_dataset, test_sampler, shuffle=False
@@ -269,7 +269,7 @@ def get_dataloader(config, phase: Literal["train", "valid", "test", "evaluation"
     if phase=="valid" and "Use_CustomDataloader" in config and config["Use_CustomDataloader"]:
         return MyValidDataLoader
     if phase=="test" and "Use_CustomDataloader" in config and config["Use_CustomDataloader"]:
-        return FullSortEvalDataLoader   
+        return MyTestDataLoader   
 
     if config["model"] in register_table:
         return register_table[config["model"]](config, phase)
@@ -398,7 +398,9 @@ def create_samplers(config, dataset, built_datasets):
         repeatable,
         base_sampler=base_sampler,
     )
+  
     test_sampler = test_sampler.set_phase("test") if test_sampler else None
+
     return train_sampler, valid_sampler, test_sampler
 
 

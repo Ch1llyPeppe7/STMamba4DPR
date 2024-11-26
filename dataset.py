@@ -2,6 +2,7 @@ from recbole.data.dataset.sequential_dataset import SequentialDataset
 from recbole.data.interaction import Interaction
 import numpy as np
 import torch
+from torch.utils.data import BatchSampler,Sampler
 import pandas as pd
 from logging import getLogger
 import torch.nn.utils.rnn as rnn_utils
@@ -13,10 +14,11 @@ from recbole.utils import (
     ensure_dir,
 )
 from myutils import *
-from recbole.data.dataloader.abstract_dataloader import (
-    AbstractDataLoader
-)
-from recbole.utils import InputType, FeatureType, FeatureSource
+# from recbole.data.dataloader.abstract_dataloader import (
+#     AbstractDataLoader
+# )
+from recbole.utils import InputType, FeatureType, FeatureSource, ModelType
+from recbole.data.transform import construct_transform
 from numpy.random import sample
 from collections import Counter
 import copy
@@ -226,6 +228,151 @@ class FourSquare(SequentialDataset):
     def __getitem__(self, idx):
         return self.inter_feat.iloc[idx] 
 
+
+
+
+
+class RandomUserSequenceSampler(Sampler):
+    """
+    随机用户序列采样器：随机返回每个用户切分后的序列索引
+    """
+    def __init__(self, dataset, user_field, time_field, seq_len,batch_size):
+        self.dataset = dataset
+        self.user_field = user_field
+        self.time_field = time_field
+        self.seq_len = seq_len
+        self.splits = self._prepare_splits()
+        self.batch_size=batch_size
+
+    def _prepare_splits(self):
+        """
+        将数据按用户分组，并对时间序列按 seq_len 切分成多个子序列。
+        返回一个二维列表：[[seq1_idx], [seq2_idx], ...]
+        """
+        user_sequences = {}
+        # 按用户分组并排序
+        for idx, interaction in enumerate(self.dataset):
+            user_id = interaction[self.user_field]
+            if user_id not in user_sequences:
+                user_sequences[user_id] = []
+            user_sequences[user_id].append(idx)
+
+        for user_id, indices in user_sequences.items():
+            user_sequences[user_id].sort(key=lambda idx: self.dataset[idx][self.time_field])
+
+        # 切分序列
+        split_indices = []
+        for indices in user_sequences.values():
+            for i in range(0, len(indices), self.seq_len):
+                split_indices.append(indices[i:i + self.seq_len])
+        return split_indices
+
+    def __iter__(self):
+        """
+        随机打乱序列索引并返回
+        """
+        shuffled_indices = np.random.permutation(len(self.splits))
+        batches=[]
+        for idx in shuffled_indices:
+            batches.append(self.splits[idx])
+            if len(batches) == self.batch_size:
+                yield batches  # 返回整个批次
+                batches = []
+        if batches:
+            yield batches
+
+    def __len__(self):
+        return len(self.splits)
+
+
+
+class AbstractDataLoader(torch.utils.data.DataLoader):
+    """:class:`AbstractDataLoader` is an abstract object which would return a batch of data which is loaded by
+    :class:`~recbole.data.interaction.Interaction` when it is iterated.
+    And it is also the ancestor of all other dataloader.
+
+    Args:
+        config (Config): The config of dataloader.
+        dataset (Dataset): The dataset of dataloader.
+        sampler (Sampler): The sampler of dataloader.
+        shuffle (bool, optional): Whether the dataloader will be shuffle after a round. Defaults to ``False``.
+
+    Attributes:
+        _dataset (Dataset): The dataset of this dataloader.
+        shuffle (bool): If ``True``, dataloader will shuffle before every epoch.
+        pr (int): Pointer of dataloader.
+        step (int): The increment of :attr:`pr` for each batch.
+        _batch_size (int): The max interaction number for all batch.
+    """
+
+    def __init__(self, config, dataset, sampler, shuffle=False):
+        self.shuffle = shuffle
+        self.config = config
+        self._dataset = dataset
+        self._sampler = sampler
+        self._batch_size = self.step = self.model = None
+        self._init_batch_size_and_step()
+        index_sampler = None
+        self.generator = torch.Generator()
+        self.generator.manual_seed(config["seed"])
+        self.transform = construct_transform(config)
+        self.is_sequential = config["MODEL_TYPE"] == ModelType.SEQUENTIAL
+        if not config["single_spec"]:
+            index_sampler = torch.utils.data.distributed.DistributedSampler(
+                list(range(self.sample_size)), shuffle=shuffle, drop_last=False
+            )
+            self.step = max(1, self.step // config["world_size"])
+            shuffle = False
+
+        batch_sampler=RandomUserSequenceSampler(dataset,dataset.uid_field,dataset.time_field,dataset.max_seq_length,self._batch_size)
+        super().__init__(
+            dataset=list(range(self.sample_size)),
+            collate_fn=self.collate_fn,
+            num_workers=config["worker"],
+            generator=self.generator,
+            batch_sampler=batch_sampler
+        )
+
+    def _init_batch_size_and_step(self):
+        """Initializing :attr:`step` and :attr:`batch_size`."""
+        raise NotImplementedError(
+            "Method [init_batch_size_and_step] should be implemented"
+        )
+
+    def update_config(self, config):
+        """Update configure of dataloader, such as :attr:`batch_size`, :attr:`step` etc.
+
+        Args:
+            config (Config): The new config of dataloader.
+        """
+        self.config = config
+        self._init_batch_size_and_step()
+
+    def set_batch_size(self, batch_size):
+        """Reset the batch_size of the dataloader, but it can't be called when dataloader is being iterated.
+
+        Args:
+            batch_size (int): the new batch_size of dataloader.
+        """
+        self._batch_size = batch_size
+
+    def collate_fn(self):
+        """Collect the sampled index, and apply neg_sampling or other methods to get the final data."""
+        raise NotImplementedError("Method [collate_fn] must be implemented.")
+
+    def __iter__(self):
+        global start_iter
+        start_iter = True
+        res = super().__iter__()
+        start_iter = False
+        return res
+
+    def __getattribute__(self, __name: str):
+        global start_iter
+        if not start_iter and __name == "dataset":
+            __name = "_dataset"
+        return super().__getattribute__(__name)
+
 class NegSampleDataLoader(AbstractDataLoader):
     """:class:`NegSampleDataLoader` is an abstract class which can sample negative examples by ratio.
     It has two neg-sampling method, the one is 1-by-1 neg-sampling (pair wise),
@@ -241,6 +388,7 @@ class NegSampleDataLoader(AbstractDataLoader):
     def __init__(self, config, dataset, sampler, shuffle=True):
         self.logger = getLogger()
         super().__init__(config, dataset, sampler, shuffle=shuffle)
+        
 
     def _set_neg_sample_args(self, config, dataset, dl_format, neg_sample_args):
         self.uid_field = dataset.uid_field
@@ -348,23 +496,27 @@ class NegSampleDataLoader(AbstractDataLoader):
 
 
 
-
+start_iter=False
 class MyTrainDataLoader(NegSampleDataLoader):
     def __init__(self, config, dataset, sampler, shuffle):
         self.sample_size = len(dataset)
-        self.batch_size =config["train_batch_size"] 
+        self._batch_size =config["train_batch_size"] 
         super().__init__(config, dataset, sampler, shuffle)
-        super()._set_neg_sample_args(config, dataset, InputType.PAIRWISE, config["train_neg_sample_args"])
-    
+        super()._set_neg_sample_args(config, dataset, InputType.POINTWISE, config["train_neg_sample_args"])
+   
 
     def _init_batch_size_and_step(self):
-        self.step = self.batch_size 
+        self.step = self._batch_size 
 
     def collate_fn(self, index):
         index = np.array(index)
-        data = self._dataset[index]
-        transformed_data = self.transform(self._dataset, data)
-        return self._neg_sampling(transformed_data)
+        data=[]
+        negs=[]
+        for idx in index:
+            data.append(self._dataset[idx])
+            negs.append(self._neg_sampling(self._dataset[idx]))
+        return data,negs
+        
 
 
     def _neg_sampling(self, inter_feat):
@@ -399,15 +551,18 @@ class MyTrainDataLoader(NegSampleDataLoader):
                 neg_item_ids = self._sampler.sample_by_user_ids(
                     user_ids, item_ids, self.neg_sample_num
                 )
-                return self.sampling_func(inter_feat, neg_item_ids)
+                return neg_item_ids#dont mix it
             else:
                 return inter_feat
-
+    # def __iter__(self):
+    #     self.start_iter = True  
+    #     for indices in self.batch_sampler:
+    #         yield indices
 
 
         
 class MyValidDataLoader(NegSampleDataLoader):
-    def __init__(self, config, dataset,train_dataset, sampler, shuffle):
+    def __init__(self, config, dataset, sampler, shuffle):
         # # 获取样本大小和初始化参数
         self.sample_size = len(dataset)
         self.batch_size =config["eval_batch_size"] 
@@ -451,14 +606,12 @@ class MyValidDataLoader(NegSampleDataLoader):
 
 
 class MyTestDataLoader(AbstractDataLoader):
-    def __init__(self, config, dataset,train_dataset, sampler, shuffle):
+    def __init__(self, config, dataset, sampler, shuffle):
         # 获取样本大小和初始化参数
         self.sample_size = len(dataset)
         self._sampler = sampler 
         self.batch_size =config["eval_batch_size"] 
         self._init_batch_size_and_step()
-        self.hist_item=train_dataset.inter_feat[train_dataset.iid_field]
-        self.hist_user=train_dataset.inter_feat[train_dataset.uid_field]
         super().__init__(config, dataset, sampler, shuffle)
     
     def _init_batch_size_and_step(self):
