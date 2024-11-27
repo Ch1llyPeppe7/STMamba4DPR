@@ -5,6 +5,24 @@ import plotly.graph_objects as go
 import random
 import torch
 
+def accumulate_category(Cs,userids,UC):
+    for cid,uid in zip(torch.tensor(Cs,dtype=torch.int32),torch.tensor(userids,dtype=torch.int32)):
+        UC.index_put_((uid,cid),torch.tensor(1,dtype=torch.float32),accumulate=True)
+    return UC
+
+def UC_SVD(Ec,nonzero_mask,k):
+    cal=Ec[nonzero_mask]
+    normalize_cal=cal/cal.sum(1,keepdim=True)
+
+    U, S, Vt = torch.linalg.svd(normalize_cal, full_matrices=False)
+    U_k = U[:, :k]
+    S_k = S[:k]
+    Vt_k = Vt[:k, :]
+    return U_k,S_k,Vt_k.T
+
+
+
+
 def user_location_affinity_matrix(center_X,center_Y,width,height,device):
     #不同用户对同一用户的相似度在同一尺度上 
     xmax=center_X+width

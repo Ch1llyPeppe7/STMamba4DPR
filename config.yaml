@@ -17,7 +17,7 @@ expand: 2                       # (int) Block expansion factor
 checkpoint_dir: 'SavedData'
 save_dataloaders: False
 dataloaders_save_path: ''  # 留空，代码会使用默认路径
-save_dataset: False                 # 启用保存dataset功能
+save_dataset: True                 # 启用保存dataset功能
 dataset_save_path: 'SavedData/foursquare_NYC-FourSquare.pth'  
 seed: 42  # 设置一个默认种子
 
@@ -50,33 +50,12 @@ NEG_PREFIX: "neg_"
 
 # training settings
 epochs: 200
-train_batch_size: 4
+train_batch_size: 10
 learner: adam
 learning_rate: 0.001
 eval_step: 1
 stopping_step: 10
-train_neg_sample_args:
 single_spec: True
-
-
-# evalution settings
-metrics: ['Recall', 'MRR']
-valid_metric: MRR@20
-eval_batch_size: 64
-weight_decay: 0.0
-topk: [20]
-# 评估设置，确保为顺序推荐任务配置时间顺序
-
-eval_args:
-  order: TO 
-  spilt: 
-    RS: [0.7,0.1,0.2]
-  gourp_by: user_id
-  mode:
-    val: labeled
-    test: labeled
-  metrics: ["Recall@1", "Recall@20","MRR@20"]  # 使用你需要的评估指标
-
 
 train_neg_sample_args: 
   distribution: "popularity"
@@ -84,14 +63,25 @@ train_neg_sample_args:
   dynamic: False
   sample_num: 5
 
-valid_neg_sample_args: 
-  distribution: "popularity" 
-  alpha: 1.0
-  dynamic: False
-  sample_num: 3
+eval_args:
+  order: TO 
+  spilt: 
+    RS: [0.7,0.1,0.2]
+  gourp_by: user_id
+  max_seq_len: 20 
+  mode:
+    val: labeled
+    test: labeled
+  metrics: ["Recall@1", "Recall@20","MRR@20"]  # 使用你需要的评估指标
 
-test_neg_sample_args: 
-  distribution: "none" 
-  alpha: 1.0
-  dynamic: False
-  sample_num: 3
+# evalution settings
+metrics: ['Recall', 'MRR']
+valid_metric: MRR@20
+eval_batch_size: 100
+weight_decay: 0.0
+topk: [20]
+# 评估设置，确保为顺序推荐任务配置时间顺序
+
+
+
+

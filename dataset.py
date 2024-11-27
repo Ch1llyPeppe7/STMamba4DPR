@@ -236,11 +236,11 @@ class RandomUserSequenceSampler(Sampler):
     """
     随机用户序列采样器：随机返回每个用户切分后的序列索引
     """
-    def __init__(self, dataset, user_field, time_field, seq_len,batch_size):
+    def __init__(self, dataset,batch_size):
         self.dataset = dataset
-        self.user_field = user_field
-        self.time_field = time_field
-        self.seq_len = seq_len
+        self.uid_field = dataset.uid_field
+        self.time_field = dataset.time_field
+        self.seq_len = dataset.max_seq_length
         self.splits = self._prepare_splits()
         self.batch_size=batch_size
 
@@ -252,7 +252,7 @@ class RandomUserSequenceSampler(Sampler):
         user_sequences = {}
         # 按用户分组并排序
         for idx, interaction in enumerate(self.dataset):
-            user_id = interaction[self.user_field]
+            user_id = interaction[self.uid_field]
             if user_id not in user_sequences:
                 user_sequences[user_id] = []
             user_sequences[user_id].append(idx)
@@ -267,7 +267,7 @@ class RandomUserSequenceSampler(Sampler):
                 seq = indices[i:i + self.seq_len]
                 if len(seq) < self.seq_len:
                     # 不足 seq_len 时，用 0 补充
-                    seq = seq + [0] * (self.seq_len - len(seq))
+                    seq = seq + [np.nan] * (self.seq_len - len(seq))
                 split_indices.append(seq)
         return split_indices
 
@@ -321,7 +321,7 @@ class AbstractDataLoader(torch.utils.data.DataLoader):
             self.step = max(1, self.step // config["world_size"])
             shuffle = False
 
-        batch_sampler=RandomUserSequenceSampler(dataset,dataset.uid_field,dataset.time_field,dataset.max_seq_length,self._batch_size)
+        batch_sampler=RandomUserSequenceSampler(dataset,self._batch_size)
         super().__init__(
             dataset=list(range(self.sample_size)),
             collate_fn=self.collate_fn,
@@ -511,7 +511,7 @@ class MyTrainDataLoader(NegSampleDataLoader):
     def collate_fn(self, index):
         item_seqs=[]
         userids=[]
-
+        Times=[]
         Xs=[]
         Ys=[]
         Cs=[]
@@ -519,25 +519,48 @@ class MyTrainDataLoader(NegSampleDataLoader):
         labels=[]
         iid_field=self._dataset.iid_field
         uid_field=self._dataset.uid_field
+        time_field=self._dataset.time_field
         last=[]
-        for idx in index:
-            items_seq=(self._dataset[idx])[iid_field].to_numpy()
-            item_seqs.append(items_seq)
+        for idxs in index:
+            total_length=len(idxs)
+            label=(~np.isnan(idxs)).astype(int)
+            seq_length=label.sum()
+            label[seq_length-1]=2
+            labels.append(label)
+            
+            
+            idx=idxs[:seq_length]
+           
+            items_seq = (self._dataset[idx])[iid_field].to_numpy()
+            time_seq = (self._dataset[idx])[time_field].to_numpy()
 
+            items_seq = np.pad(items_seq, (0, total_length -seq_length), mode='constant', constant_values=0)
+            time_seq = np.pad(time_seq, (0, total_length -seq_length), mode='constant', constant_values=0)
+
+            item_seqs.append(items_seq)
+            Times.append(time_seq)
+            
             Xs.append(self.itemX[items_seq])
             Ys.append(self.itemY[items_seq])
             Cs.append(self.itemC[items_seq])
 
-            labels.append((items_seq>0).astype(int))
-
-            userids.append((self._dataset[idx[0]])[uid_field])
+            user_seq=(self._dataset[idx])[uid_field].to_numpy()
+            user_seq=np.pad(user_seq,(0, total_length -seq_length), mode='constant', constant_values=0)
+            userids.append(user_seq)
             
             last.append(idx[-1])
 
+        neg_Xs=[]
+        neg_Ys=[]
+        neg_Cs=[]
         negs=self._neg_sampling(self.dataset[last])
+        for idx in negs:
+            neg_Xs.append(Xs[idx])
+            neg_Ys.append(Ys[idx])
+            neg_Cs.append(Cs[idx])
        
 
-        return userids,item_seqs,Xs,Ys,Cs,labels
+        return userids,item_seqs,Xs,Ys,Cs,labels,Times
     
 
     def __iter__(self):
@@ -591,104 +614,138 @@ class MyTrainDataLoader(NegSampleDataLoader):
 
 
         
-class MyValidDataLoader(NegSampleDataLoader):
+class MyValidDataLoader(AbstractDataLoader):
     def __init__(self, config, dataset, sampler, shuffle):
-        # # 获取样本大小和初始化参数
         self.sample_size = len(dataset)
         self.batch_size =config["eval_batch_size"] 
-        # self.hist_item=train_dataset.inter_feat[train_dataset.iid_field]
-        # self.hist_user=train_dataset.inter_feat[train_dataset.uid_field]
+        dataset.max_seq_length=config["eval_args"]["max_seq_len"]
         super().__init__(config, dataset, sampler, shuffle)
-        super()._set_neg_sample_args(config, dataset, InputType.PAIRWISE, config["valid_neg_sample_args"])
-        del self._dataset.inter_feat['timestamp']
+        self.itemX=(self.dataset.item_feat["longitude"]).to_numpy()
+        self.itemY=(self.dataset.item_feat["latitude"]).to_numpy()
+        self.itemC=(self.dataset.item_feat["venue_category_id"]).to_numpy()
+
     def _init_batch_size_and_step(self):
         self.step = self.batch_size 
+        self._batch_size=self.batch_size
 
     def collate_fn(self, index):
-        data=super()._neg_sampling(self._dataset.inter_feat[index])
+        item_seqs=[]
+        userids=[]
+        Times=[]
+        Xs=[]
+        Ys=[]
+        Cs=[]
+
+        labels=[]
+        iid_field=self._dataset.iid_field
+        uid_field=self._dataset.uid_field
+        time_field=self._dataset.time_field
+   
+        for idxs in index:
+            total_length=len(idxs)
+            label=(~np.isnan(idxs)).astype(int)
+            seq_length=label.sum()
+            label[seq_length//2:]=2
+            label[seq_length:]=0
+            labels.append(label)
+            
+            idx=idxs[:seq_length]
+           
+            items_seq = (self._dataset[idx])[iid_field].to_numpy()
+            time_seq = (self._dataset[idx])[time_field].to_numpy()
+
+            items_seq = np.pad(items_seq, (0, total_length -seq_length), mode='constant', constant_values=0)
+            time_seq = np.pad(time_seq, (0, total_length -seq_length), mode='constant', constant_values=0)
+
+            item_seqs.append(items_seq)
+            Times.append(time_seq)
+            
+            Xs.append(self.itemX[items_seq])
+            Ys.append(self.itemY[items_seq])
+            Cs.append(self.itemC[items_seq])
+
+            user_seq=(self._dataset[idx])[uid_field].to_numpy()
+            user_seq=np.pad(user_seq,(0, total_length -seq_length), mode='constant', constant_values=0)
+            userids.append(user_seq)
         
+        return userids,item_seqs,Xs,Ys,Cs,labels,Times
 
-        num_batch=item_id_list.size(0)
-        for idx in range(num_batch):
-           hist_idx = (self.hist_user == user_id[idx]).nonzero(as_tuple=True)[0]  # 获取当前 idx 对应的匹配索引
-           batch_idx = torch.full((hist_idx.size(0), 1), idx)  # 创建一个大小为 (N, 1) 的张量，值全为 idx
-           hist_idx = torch.cat((batch_idx, hist_idx.unsqueeze(1)), dim=1)  # 将 idx 加到每个元素前
-
-        positive_i=self._dataset.inter_feat[self._dataset.iid_field][valid_indices]
-        
-        first_occurrence = {}
-        for i, uid in enumerate(user_id):
-            # 使用 .item() 将 tensor 转换为标量值
-            if uid.item() not in first_occurrence:
-                first_occurrence[uid.item()] = i
-
-        # 使用 .item() 将每个 uid 转换为普通的数值类型
-        positive_u = torch.tensor([first_occurrence[uid.item()] for uid in user_id], dtype=torch.long)
-
-        return [Interaction(data),hist_idx,positive_u,positive_i]
-
-    # def update_config(self, config):
-    #     """
-    #     更新配置，并重新初始化批次大小和步长。
-    #     """
-    #     super().update_config(config)
-    #     self._init_batch_size_and_step()
-
-
+    def __iter__(self):
+        batches=[]
+        indices=self.batch_sampler.get_batches()
+        for indice in indices:
+            batches.append(indice)
+            if len(batches)==self._batch_size:
+                yield self.collate_fn(batches)
+                batches=[]
+        if batches:
+            yield self.collate_fn(batches)  
 class MyTestDataLoader(AbstractDataLoader):
     def __init__(self, config, dataset, sampler, shuffle):
-        # 获取样本大小和初始化参数
         self.sample_size = len(dataset)
-        self._sampler = sampler 
         self.batch_size =config["eval_batch_size"] 
-        self._init_batch_size_and_step()
+        dataset.max_seq_length=config["eval_args"]["max_seq_len"]
         super().__init__(config, dataset, sampler, shuffle)
-    
+        self.itemX=(self.dataset.item_feat["longitude"]).to_numpy()
+        self.itemY=(self.dataset.item_feat["latitude"]).to_numpy()
+        self.itemC=(self.dataset.item_feat["venue_category_id"]).to_numpy()
+
     def _init_batch_size_and_step(self):
         self.step = self.batch_size 
+        self._batch_size=self.batch_size
 
     def collate_fn(self, index):
-        # 将索引数组转换为一个批次的数据
-        index = np.array(index)
-        # 提取测试批次数据
-        valid_indices = index[index != -1]
-        # 直接从 inter_feat 中提取批次数据
-        user_id=self._dataset.inter_feat[self._dataset.uid_field][valid_indices]
-        item_id_list=self._dataset.inter_feat[self._dataset.iid_field][valid_indices].unsqueeze(0)
-        item_length = torch.tensor([len(item_id_list[0]) - 1], dtype=torch.long)
-        pos_item=(item_id_list[:,item_length-1])
-        data = {
-            self._dataset.uid_field: user_id,
-            self._dataset.ITEM_SEQ: item_id_list,
-            self._dataset.ITEM_SEQ_LEN: item_length,
-            self._dataset.iid_field: pos_item 
-        }
-        num_batch=item_id_list.size(0)
-        for idx in range(num_batch):
-           hist_idx = (self.hist_user == user_id[idx]).nonzero(as_tuple=True)[0]  # 获取当前 idx 对应的匹配索引
-           batch_idx = torch.full((hist_idx.size(0), 1), idx)  # 创建一个大小为 (N, 1) 的张量，值全为 idx
-           hist_idx = torch.cat((batch_idx, hist_idx.unsqueeze(1)), dim=1)  # 将 idx 加到每个元素前
+        item_seqs=[]
+        userids=[]
+        Times=[]
+        Xs=[]
+        Ys=[]
+        Cs=[]
 
-        positive_i=self._dataset.inter_feat[self._dataset.iid_field][valid_indices]
+        labels=[]
+        iid_field=self._dataset.iid_field
+        uid_field=self._dataset.uid_field
+        time_field=self._dataset.time_field
+   
+        for idxs in index:
+            total_length=len(idxs)
+            label=(~np.isnan(idxs)).astype(int)
+            seq_length=label.sum()
+            label[seq_length//2:]=2#2for predict
+            label[seq_length:]=0
+            labels.append(label)
+            
+            idx=idxs[:seq_length]
+           
+            items_seq = (self._dataset[idx])[iid_field].to_numpy()
+            time_seq = (self._dataset[idx])[time_field].to_numpy()
+
+            items_seq = np.pad(items_seq, (0, total_length -seq_length), mode='constant', constant_values=0)
+            time_seq = np.pad(time_seq, (0, total_length -seq_length), mode='constant', constant_values=0)
+
+            item_seqs.append(items_seq)
+            Times.append(time_seq)
+            
+            Xs.append(self.itemX[items_seq])
+            Ys.append(self.itemY[items_seq])
+            Cs.append(self.itemC[items_seq])
+
+            user_seq=(self._dataset[idx])[uid_field].to_numpy()
+            user_seq=np.pad(user_seq,(0, total_length -seq_length), mode='constant', constant_values=0)
+            userids.append(user_seq)
         
-        first_occurrence = {}
-        for i, uid in enumerate(user_id):
-            # 使用 .item() 将 tensor 转换为标量值
-            if uid.item() not in first_occurrence:
-                first_occurrence[uid.item()] = i
+        return userids,item_seqs,Xs,Ys,Cs,labels,Times
 
-        # 使用 .item() 将每个 uid 转换为普通的数值类型
-        positive_u = torch.tensor([first_occurrence[uid.item()] for uid in user_id], dtype=torch.long)
-
-        return [Interaction(data),hist_idx,positive_u,positive_i]#
-
-    def update_config(self, config):
-        """
-        更新配置，并重新初始化批次大小和步长。
-        """
-        super().update_config(config)
-        self._init_batch_size_and_step()
-
+    def __iter__(self):
+        batches=[]
+        indices=self.batch_sampler.get_batches()
+        for indice in indices:
+            batches.append(indice)
+            if len(batches)==self._batch_size:
+                yield self.collate_fn(batches)
+                batches=[]
+        if batches:
+            yield self.collate_fn(batches)  
 
 
 class AbstractSampler(object):
