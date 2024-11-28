@@ -72,8 +72,6 @@ class FourSquare(SequentialDataset):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             
 
-    
-
         self.item_feat['longitude'],self.item_feat['latitude']= self.lat_lon_to_spherical(latitude, longitude,device)
         
 
@@ -531,7 +529,7 @@ class MyTrainDataLoader(NegSampleDataLoader):
             
             idx=idxs[:seq_length]
            
-            items_seq = (self._dataset[idx])[iid_field].to_numpy()
+            items_seq = (self._dataset[idx])[iid_field].to_numpy(dtype=int)
             time_seq = (self._dataset[idx])[time_field].to_numpy()
 
             items_seq = np.pad(items_seq, (0, total_length -seq_length), mode='constant', constant_values=0)
@@ -542,9 +540,9 @@ class MyTrainDataLoader(NegSampleDataLoader):
             
             Xs.append(self.itemX[items_seq])
             Ys.append(self.itemY[items_seq])
-            Cs.append(self.itemC[items_seq])
+            Cs.append((self.itemC[items_seq]).astype(int))
 
-            user_seq=(self._dataset[idx])[uid_field].to_numpy()
+            user_seq=(self._dataset[idx])[uid_field].to_numpy(dtype=int)
             user_seq=np.pad(user_seq,(0, total_length -seq_length), mode='constant', constant_values=0)
             userids.append(user_seq)
             
@@ -555,12 +553,17 @@ class MyTrainDataLoader(NegSampleDataLoader):
         neg_Cs=[]
         negs=self._neg_sampling(self.dataset[last])
         for idx in negs:
-            neg_Xs.append(Xs[idx])
-            neg_Ys.append(Ys[idx])
-            neg_Cs.append(Cs[idx])
-       
+            neg_Xs.append(self.itemX[idx])
+            neg_Ys.append(self.itemY[idx])
+            neg_Cs.append(self.itemC[idx])
+        Cs=np.array(Cs)
+        Xs=np.array(Xs)
+        Ys=np.array(Ys)
+        Times=np.array(Times)
+        userids=np.array(userids)
+        labels=np.array(labels)
 
-        return userids,item_seqs,Xs,Ys,Cs,labels,Times
+        return userids,item_seqs,Xs,Ys,Cs,labels,Times,negs
     
 
     def __iter__(self):
@@ -1055,7 +1058,7 @@ class RepeatableSampler(AbstractSampler):
                         if v in used
                     ]
                 )
-        return torch.tensor(value_ids, dtype=torch.long).reshape(key_num,num)
+        return value_ids.reshape(key_num,num)
 
 
     def set_phase(self, phase):

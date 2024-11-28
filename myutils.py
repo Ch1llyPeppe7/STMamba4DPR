@@ -6,15 +6,18 @@ import random
 import torch
 
 def accumulate_category(Cs,userids,UC):
-    for cid,uid in zip(torch.tensor(Cs,dtype=torch.int32),torch.tensor(userids,dtype=torch.int32)):
+    Cs_tensor = torch.tensor(Cs, dtype=torch.int32)
+    userids_tensor = torch.tensor(userids, dtype=torch.int32)
+
+    combined_tensor = torch.stack((Cs_tensor, userids_tensor), dim=1)
+    for cid,uid in combined_tensor:
         UC.index_put_((uid,cid),torch.tensor(1,dtype=torch.float32),accumulate=True)
     return UC
 
-def UC_SVD(Ec,nonzero_mask,k):
-    cal=Ec[nonzero_mask]
-    normalize_cal=cal/cal.sum(1,keepdim=True)
+def UC_SVD(M,k):
+    normalize_M=M/M.sum(1,keepdim=True)
 
-    U, S, Vt = torch.linalg.svd(normalize_cal, full_matrices=False)
+    U, S, Vt = torch.linalg.svd(normalize_M, full_matrices=False)
     U_k = U[:, :k]
     S_k = S[:k]
     Vt_k = Vt[:k, :]

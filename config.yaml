@@ -50,7 +50,7 @@ NEG_PREFIX: "neg_"
 
 # training settings
 epochs: 200
-train_batch_size: 10
+train_batch_size: 100
 learner: adam
 learning_rate: 0.001
 eval_step: 1
