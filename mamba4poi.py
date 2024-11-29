@@ -40,8 +40,6 @@ class Mamba4POI(SequentialRecommender):
             self.loss_fct = BPRLoss()
         elif self.loss_type == "CE":
             self.loss_fct = nn.CrossEntropyLoss()
-        elif self.loss_type == "NEW":  # 处理新的损失类型
-            self.loss_fct = None  
         else:
             raise NotImplementedError("Make sure 'loss_type' in ['BPR', 'CE', 'NEW']!")
 
