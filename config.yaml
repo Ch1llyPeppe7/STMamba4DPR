@@ -15,7 +15,7 @@ expand: 2                       # (int) Block expansion factor
 
 # Save Directory Settings
 checkpoint_dir: 'SavedData'
-save_dataloaders: False
+save_dataloaders: True
 dataloaders_save_path: ''  # 留空，代码会使用默认路径
 save_dataset: True                 # 启用保存dataset功能
 dataset_save_path: 'SavedData/foursquare_NYC-FourSquare.pth'  
