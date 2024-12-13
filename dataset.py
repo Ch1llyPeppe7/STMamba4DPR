@@ -61,18 +61,15 @@ class FourSquare(SequentialDataset):
         getattr(self,f"{self.iid_field}_list_field", None): self.max_seq_length,
             'time_encoded': 12  # time_encoded 是一个长度为 12 的向量
         }
- 
-        
-    def _change_feat_format(self):
-        # 获取经纬度数据，并转换为 torch 张量 
+
         latitude = torch.tensor(self.item_feat['latitude'].values, dtype=torch.float32)
         longitude = torch.tensor(self.item_feat['longitude'].values, dtype=torch.float32)
 
-        # 如果 GPU 可用，将数据移到 GPU 上
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            
 
         self.item_feat['longitude'],self.item_feat['latitude']= self.lat_lon_to_spherical(latitude, longitude,device)
+ 
+ 
         
 
     def lat_lon_to_spherical(self, latitudes, longitudes, device,radius=6371):
@@ -108,16 +105,6 @@ class FourSquare(SequentialDataset):
         self.field2type[dest_field] = self.field2type[source_field]
         self.field2source[dest_field] = self.field2source[source_field]
         self.field2seqlen[dest_field] = self.field2seqlen.get(source_field, 0)
-
-    def sort(self, by, ascending=True):
-        """Sort the interaction records inplace.
-
-        Args:
-            by (str or list of str): Field that as the key in the sorting process.
-            ascending (bool or list of bool, optional): Results are ascending if ``True``, otherwise descending.
-                Defaults to ``True``
-        """
-        self.inter_feat.sort_values(by=by, ascending=ascending)
 
     def build(self):
         """Processing dataset according to evaluation setting, including Group, Order and Split.
@@ -181,50 +168,9 @@ class FourSquare(SequentialDataset):
             )
 
         return datasets
-    def split_by_ratio(self, ratios, group_by=None):
-        """Split interaction records by ratios.
 
-        Args:
-            ratios (list): List of split ratios. No need to be normalized.
-            group_by (str, optional): Field name that interaction records should grouped by before splitting.
-                Defaults to ``None``
-
-        Returns:
-            list: List of :class:`~Dataset`, whose interaction features has been split.
-
-        Note:
-            Other than the first one, each part is rounded down.
-        """
-        self.logger.debug(f"split by ratios [{ratios}], group_by=[{group_by}]")
-        tot_ratio = sum(ratios)
-        ratios = [_ / tot_ratio for _ in ratios]
-
-        if group_by is None:
-            tot_cnt = self.__len__()
-            split_ids = self._calcu_split_ids(tot=tot_cnt, ratios=ratios)
-            next_index = [
-                range(start, end)
-                for start, end in zip([0] + split_ids, split_ids + [tot_cnt])
-            ]
-        else:
-            grouped_inter_feat_index = self._grouped_index(
-                self.inter_feat[group_by].to_numpy()
-            )
-            next_index = [[] for _ in range(len(ratios))]
-            for grouped_index in grouped_inter_feat_index:
-                tot_cnt = len(grouped_index)
-                split_ids = self._calcu_split_ids(tot=tot_cnt, ratios=ratios)
-                for index, start, end in zip(
-                    next_index, [0] + split_ids, split_ids + [tot_cnt]
-                ):
-                    index.extend(grouped_index[start:end])
-        self._drop_unused_col()
-        next_df = [self.inter_feat.iloc[index] for index in next_index]
-        next_ds = [self.copy(_) for _ in next_df]
-        return next_ds
     
-    def __getitem__(self, idx):
-        return self.inter_feat.iloc[idx] 
+
 
 
 
@@ -243,14 +189,9 @@ class RandomUserSequenceSampler(Sampler):
         self.batch_size=batch_size
 
     def _prepare_splits(self):
-        """
-        将数据按用户分组，并对时间序列按 seq_len 切分成多个子序列。
-        返回一个二维列表：[[seq1_idx], [seq2_idx], ...]
-        """
         user_sequences = {}
-        # 按用户分组并排序
-        for idx, interaction in enumerate(self.dataset):
-            user_id = interaction[self.uid_field]
+        for idx,uid in enumerate(self.dataset.inter_feat[self.uid_field]):
+            user_id=uid.item()
             if user_id not in user_sequences:
                 user_sequences[user_id] = []
             user_sequences[user_id].append(idx)
@@ -435,8 +376,8 @@ class NegSampleDataLoader(AbstractDataLoader):
     def _neg_sampling(self, inter_feat):
         if self.neg_sample_args.get("dynamic", False):
             candidate_num = self.neg_sample_args["candidate_num"]
-            user_ids = inter_feat[self.uid_field].to_numpy()
-            item_ids = inter_feat[self.iid_field].to_numpy()
+            user_ids = inter_feat[self.uid_field].numpy()
+            item_ids = inter_feat[self.iid_field].numpy()
             neg_candidate_ids = self._sampler.sample_by_user_ids(
                 user_ids, item_ids, self.neg_sample_num * candidate_num
             )
@@ -459,8 +400,8 @@ class NegSampleDataLoader(AbstractDataLoader):
             self.neg_sample_args["distribution"] != "none"
             and self.neg_sample_args["sample_num"] != "none"
         ):
-            user_ids = inter_feat[self.uid_field].to_numpy()
-            item_ids = inter_feat[self.iid_field].to_numpy()
+            user_ids = inter_feat[self.uid_field].numpy()
+            item_ids = inter_feat[self.iid_field].numpy()
             neg_item_ids = self._sampler.sample_by_user_ids(
                 user_ids, item_ids, self.neg_sample_num
             )
@@ -498,9 +439,9 @@ class MyTrainDataLoader(NegSampleDataLoader):
         self.batch_size =config["train_batch_size"] 
         super().__init__(config, dataset, sampler, shuffle)
         super()._set_neg_sample_args(config, dataset, InputType.POINTWISE, config["train_neg_sample_args"])
-        self.itemX=(self.dataset.item_feat["longitude"]).to_numpy()
-        self.itemY=(self.dataset.item_feat["latitude"]).to_numpy()
-        self.itemC=(self.dataset.item_feat["venue_category_id"]).to_numpy()
+        self.itemX=(self.dataset.item_feat["longitude"])
+        self.itemY=(self.dataset.item_feat["latitude"])
+        self.itemC=(self.dataset.item_feat["venue_category_id"])
 
     def _init_batch_size_and_step(self):
         self.step = self.batch_size 
@@ -521,7 +462,7 @@ class MyTrainDataLoader(NegSampleDataLoader):
         last=[]
         for idxs in index:
             total_length=len(idxs)
-            label=(~np.isnan(idxs)).astype(int)
+            label=(~np.isnan(idxs))
             seq_length=label.sum()
             label[seq_length-1]=2
             labels.append(label)
@@ -529,8 +470,8 @@ class MyTrainDataLoader(NegSampleDataLoader):
             
             idx=idxs[:seq_length]
            
-            items_seq = (self._dataset[idx])[iid_field].to_numpy(dtype=int)
-            time_seq = (self._dataset[idx])[time_field].to_numpy()
+            items_seq = (self._dataset[idx])[iid_field]
+            time_seq = (self._dataset[idx])[time_field]
 
             items_seq = np.pad(items_seq, (0, total_length -seq_length), mode='constant', constant_values=0)
             time_seq = np.pad(time_seq, (0, total_length -seq_length), mode='constant', constant_values=0)
@@ -540,9 +481,9 @@ class MyTrainDataLoader(NegSampleDataLoader):
             
             Xs.append(self.itemX[items_seq])
             Ys.append(self.itemY[items_seq])
-            Cs.append((self.itemC[items_seq]).astype(int))
+            Cs.append(self.itemC[items_seq])
 
-            user_seq=(self._dataset[idx])[uid_field].to_numpy(dtype=int)
+            user_seq=(self._dataset[idx])[uid_field]
             user_seq=np.pad(user_seq,(0, total_length -seq_length), mode='constant', constant_values=0)
             userids.append(user_seq)
             
@@ -556,19 +497,22 @@ class MyTrainDataLoader(NegSampleDataLoader):
             neg_Xs.append(self.itemX[idx])
             neg_Ys.append(self.itemY[idx])
             neg_Cs.append(self.itemC[idx])
-        Cs=np.array(Cs)
-        Xs=np.array(Xs)
-        Ys=np.array(Ys)
-        Times=np.array(Times)
-        userids=np.array(userids)
-        labels=np.array(labels)
+        # Cs=torch.tensor(Cs,dtype=torch.int32)
+        # Xs=torch.tensor(Xs,dtype=torch.float32)
+        # Ys=torch.tensor(Ys,dtype=torch.float32)
+        # Times=torch.tensor(Times,dtype=torch.float32)
+        # userids=torch.tensor(userids,dtype=torch.float32)
+        # labels=torch.tensor(labels,dtype=torch.float32)
 
-        return userids,item_seqs,Xs,Ys,Cs,labels,Times,negs
+        dict={"user_ids":userids,"item_seqs":item_seqs,"Xs":Xs,"Ys":Ys,"Cs":Cs,"labels":labels,"Times":Times}
+
+        return dict
     
 
     def __iter__(self):
         batches=[]
         indices=self.batch_sampler.get_batches()
+        print("indeces",indices)
         for indice in indices:
             batches.append(indice)
             if len(batches)==self._batch_size:
@@ -581,8 +525,8 @@ class MyTrainDataLoader(NegSampleDataLoader):
     def _neg_sampling(self, inter_feat):
             if self.neg_sample_args.get("dynamic", False):
                 candidate_num = self.neg_sample_args["candidate_num"]
-                user_ids = inter_feat[self.uid_field].to_numpy()
-                item_ids = inter_feat[self.iid_field].to_numpy()
+                user_ids = inter_feat[self.uid_field]
+                item_ids = inter_feat[self.iid_field]
                 neg_candidate_ids = self._sampler.sample_by_user_ids(
                     user_ids, item_ids, self.neg_sample_num * candidate_num
                 )
@@ -605,8 +549,8 @@ class MyTrainDataLoader(NegSampleDataLoader):
                 self.neg_sample_args["distribution"] != "none"
                 and self.neg_sample_args["sample_num"] != "none"
             ):
-                user_ids = inter_feat[self.uid_field].to_numpy()
-                item_ids = inter_feat[self.iid_field].to_numpy()
+                user_ids = inter_feat[self.uid_field]
+                item_ids = inter_feat[self.iid_field]
                 neg_item_ids = self._sampler.sample_by_user_ids(
                     user_ids, item_ids, self.neg_sample_num
                 )
@@ -623,9 +567,9 @@ class MyValidDataLoader(AbstractDataLoader):
         self.batch_size =config["eval_batch_size"] 
         dataset.max_seq_length=config["eval_args"]["max_seq_len"]
         super().__init__(config, dataset, sampler, shuffle)
-        self.itemX=(self.dataset.item_feat["longitude"]).to_numpy()
-        self.itemY=(self.dataset.item_feat["latitude"]).to_numpy()
-        self.itemC=(self.dataset.item_feat["venue_category_id"]).to_numpy()
+        self.itemX=(self.dataset.item_feat["longitude"])
+        self.itemY=(self.dataset.item_feat["latitude"])
+        self.itemC=(self.dataset.item_feat["venue_category_id"])
 
     def _init_batch_size_and_step(self):
         self.step = self.batch_size 
@@ -676,6 +620,7 @@ class MyValidDataLoader(AbstractDataLoader):
     def __iter__(self):
         batches=[]
         indices=self.batch_sampler.get_batches()
+        print("indeces",indices)
         for indice in indices:
             batches.append(indice)
             if len(batches)==self._batch_size:
@@ -689,9 +634,9 @@ class MyTestDataLoader(AbstractDataLoader):
         self.batch_size =config["eval_batch_size"] 
         dataset.max_seq_length=config["eval_args"]["max_seq_len"]
         super().__init__(config, dataset, sampler, shuffle)
-        self.itemX=(self.dataset.item_feat["longitude"]).to_numpy()
-        self.itemY=(self.dataset.item_feat["latitude"]).to_numpy()
-        self.itemC=(self.dataset.item_feat["venue_category_id"]).to_numpy()
+        self.itemX=(self.dataset.item_feat["longitude"])
+        self.itemY=(self.dataset.item_feat["latitude"])
+        self.itemC=(self.dataset.item_feat["venue_category_id"])
 
     def _init_batch_size_and_step(self):
         self.step = self.batch_size 
@@ -735,7 +680,7 @@ class MyTestDataLoader(AbstractDataLoader):
 
             user_seq=(self._dataset[idx])[uid_field].to_numpy()
             user_seq=np.pad(user_seq,(0, total_length -seq_length), mode='constant', constant_values=0)
-            userids.append(user_seq)
+            userids.append(torch.tenspr(user_seq,dtype=torch.int))
         
         return userids,item_seqs,Xs,Ys,Cs,labels,Times
 
@@ -982,7 +927,7 @@ class RepeatableSampler(AbstractSampler):
         return np.random.randint(1, self.item_num, sample_num)
 
     def _get_candidates_list(self):
-        return list(self.dataset.inter_feat[self.iid_field].to_numpy())
+        return list(self.dataset.inter_feat[self.iid_field].numpy())
 
     def get_used_ids(self):
         """

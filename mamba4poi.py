@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-#from mamba_ssm import Mamba
+from mamba_ssm import Mamba
 from recbole.model.abstract_recommender import SequentialRecommender
 from recbole.model.loss import BPRLoss
 
