@@ -17,9 +17,11 @@ class Mamba4POI(SequentialRecommender):
         self.d_conv = config["d_conv"]
         self.expand = config["expand"]
 
-        self.locdim=int(2*self.hidden_size//4)
-        self.catdim=int(self.hidden_size-self.locdim)
-        self.item_embedding = self._init_embedding(dataset)
+        self.locdim=int(self.hidden_size/3)
+        self.catdim=int(self.hidden_size/3)
+        self.usrdim=int(self.hidden_size/3)
+
+        self.item_embedding,self.user_embedding = self._init_embedding(dataset)
   
         self.LocNorm = nn.LayerNorm(self.locdim, eps=1e-12)  # 针对地理位置编码
         self.CatNorm = nn.LayerNorm(self.catdim, eps=1e-12)  # 针对类别嵌入
@@ -46,17 +48,18 @@ class Mamba4POI(SequentialRecommender):
 
     def _init_embedding(self,dataset):
         num_category=(dataset.item_feat["venue_category_id"].max()+1).to(torch.int)
-        
+        num_user=(dataset.inter_feat["user_id"].max()+1).to(torch.int)
         _,M0,_,_=counting4all(dataset,self.device)
 
         Ec=torch.zeros((num_category,self.catdim),dtype=torch.float32)
-        
+        Eu=torch.zeros((num_user,self.catdim),dtype=torch.float32)
         row_nonzero_mask=M0.sum(1)>0
         col_nonzero_mask=M0.sum(0)>0
         nonzero_M0=M0[row_nonzero_mask][:,col_nonzero_mask]
         
         E0u,S0,E0c=UC_SVD(nonzero_M0,self.catdim,self.device)
         Ec[col_nonzero_mask]=E0c
+        Eu[row_nonzero_mask]=E0u
 
         itemX=dataset.item_feat["longitude"]
         itemY=dataset.item_feat["latitude"]
@@ -67,10 +70,14 @@ class Mamba4POI(SequentialRecommender):
 
         embedding_prior=torch.concat((LocEnco,Ec[itemC]),dim=1)
 
-        embedding_layer = nn.Embedding.from_pretrained(
+        item_embedding_layer = nn.Embedding.from_pretrained(
             embedding_prior, freeze=False
         )
-        return embedding_layer
+
+        user_embedding_layer = nn.Embedding.from_pretrained(
+            Eu, freeze=False
+        )
+        return item_embedding_layer,user_embedding_layer
 
 
     def _init_weights(self, module):
@@ -82,21 +89,24 @@ class Mamba4POI(SequentialRecommender):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
-    def forward(self, item_seq, item_seq_len):
+    def forward(self, item_seq, item_seq_len,user_id):
+        user_emb=self.user_embedding(user_id).unsqueeze(1).expand(item_seq.shape[0],item_seq.shape[1],-1)
         item_emb = self.item_embedding(item_seq)
         item_emb = self.dropout(item_emb)
-        item_emb = torch.concat((self.LocNorm(item_emb[:,:,:self.locdim]),
+        state_emb = torch.concat((user_emb,self.LocNorm(item_emb[:,:,:self.locdim]),
                         self.CatNorm(item_emb[:,:,self.locdim:])),dim=2)
         for i in range(self.num_layers):
-            item_emb = self.mamba_layers[i](item_emb)
+            state_emb = self.mamba_layers[i](state_emb)
         
-        seq_output = self.gather_indexes(item_emb, item_seq_len - 1)
+        seq_output = self.gather_indexes(state_emb, item_seq_len - 1)
         return seq_output
 
     def calculate_loss(self, interaction):
+        user_id=interaction[self.USER_ID]
         item_seq = interaction[self.ITEM_SEQ]
         item_seq_len = interaction[self.ITEM_SEQ_LEN]
-        seq_output = self.forward(item_seq, item_seq_len)
+
+        seq_output = self.forward(item_seq, item_seq_len,user_id)[:,self.usrdim:]
         pos_items = interaction[self.POS_ITEM_ID]
         
         if self.loss_type == "BPR":
@@ -118,18 +128,20 @@ class Mamba4POI(SequentialRecommender):
 
 
     def predict(self, interaction):
+        user_id=interaction[self.USER_ID]
         item_seq = interaction[self.ITEM_SEQ]
         item_seq_len = interaction[self.ITEM_SEQ_LEN]
         test_item = interaction[self.ITEM_ID]
-        seq_output = self.forward(item_seq, item_seq_len)
+        seq_output = self.forward(item_seq, item_seq_len,user_id)[:,self.usrdim:]
         test_item_emb = self.item_embedding(test_item)
         scores = torch.mul(seq_output, test_item_emb).sum(dim=1)  # [B]
         return scores
 
     def full_sort_predict(self, interaction):
+        user_id=interaction[self.USER_ID]
         item_seq = interaction[self.ITEM_SEQ]
         item_seq_len = interaction[self.ITEM_SEQ_LEN]
-        seq_output = self.forward(item_seq, item_seq_len)
+        seq_output = self.forward(item_seq, item_seq_len,user_id)[:,self.usrdim:]
         test_items_emb = self.item_embedding.weight
         scores = torch.matmul(
             seq_output, test_items_emb.transpose(0, 1)

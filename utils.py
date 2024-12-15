@@ -336,7 +336,7 @@ def _create_sampler(
                 distribution,
                 alpha,
             )
-        elif custom:
+        elif not custom:
             sampler = RepeatableSampler(
                     phases,
                     dataset,

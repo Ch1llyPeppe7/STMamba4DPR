@@ -4,11 +4,11 @@ logging:
   level: DEBUG
 
 # mamba4POI settings
-hidden_size: 64               # (int) Number of features in the hidden state. 
+hidden_size: 96               # (int) Number of features in the hidden state. 
 num_layers: 1                   # (int) Number of Mamba layers.
 dropout_prob: 0.2               # (float) Dropout rate.
 loss_type: 'BPR'                 # (str) Type of loss function. Range in ['BPR', 'CE'].
-d_state: 32                  # (int) SSM state expansion factor
+d_state: 48                 # (int) SSM state expansion factor
 d_conv: 4                       # (int) Local convolution width
 expand: 2                    # (int) Block expansion factor
 
@@ -30,7 +30,7 @@ TIME_FIELD: timestamp
 LABEL_FIELD: label
 
 load_col:
-    inter: [user_id, venue_id,venue_id_list,timestamp]
+    inter: [user_id, venue_id,timestamp]
     item: [venue_id,latitude, longitude,venue_category_id]
 
 
@@ -49,7 +49,7 @@ NEG_PREFIX: "neg_"
 
 # training settings
 epochs: 200
-train_batch_size: 1024
+train_batch_size: 8192
 learner: adam
 learning_rate: 0.001
 eval_step: 1
@@ -60,7 +60,7 @@ train_neg_sample_args:
   distribution: "popularity"
   alpha: 0.5
   dynamic: False
-  sample_num: 5
+  sample_num: 2
 
 eval_args:
   order: TO 
@@ -75,11 +75,11 @@ eval_args:
 
 
 # evalution settings
-metrics: ['Recall', 'MRR']
-valid_metric: MRR@10
-eval_batch_size: 256
+metrics: ['Recall', 'MRR','NDCG']
+valid_metric: Recall@10
+eval_batch_size: 4096
 weight_decay: 0.0
-topk: [10]
+topk: [1,5,10,20]
 
 
 

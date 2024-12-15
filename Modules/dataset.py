@@ -14,10 +14,10 @@ from recbole.utils import (
     ensure_dir,
 )
 from Modules.myutils import *
-from recbole.sampler import RepeatableSampler
+from recbole.sampler import AbstractSampler
 from collections import Counter
 import copy
-
+from scipy.spatial import KDTree
 
 def unixTime2periodicVector(unitTime, components=None):
     dt = pd.to_datetime(unitTime, unit='s')
@@ -51,12 +51,6 @@ def unixTime2periodicVector(unitTime, components=None):
 class FourSquare(SequentialDataset):
     def __init__(self, config):
         super().__init__(config)
-        self.max_seq_length = config["MAX_ITEM_LIST_LENGTH"]
-        self.field2seqlen = {
-        getattr(self,f"{self.iid_field}_list_field", None): self.max_seq_length,
-            'time_encoded': 12  # time_encoded 是一个长度为 12 的向量
-        }
-
         latitude = torch.tensor(self.item_feat['latitude'].values, dtype=torch.float32)
         longitude = torch.tensor(self.item_feat['longitude'].values, dtype=torch.float32)
 
@@ -64,8 +58,12 @@ class FourSquare(SequentialDataset):
 
         self.item_feat['longitude'],self.item_feat['latitude']= self.lat_lon_to_spherical(latitude, longitude,device)
  
- 
         
+    def get_POI_KDTree(self):
+        itemX=(self.item_feat["longitude"]).numpy()
+        itemY=(self.item_feat["latitude"]).numpy()
+        locations=np.stack((itemX,itemY),axis=-1)
+        POI_tree=KDTree(locations)
 
     def lat_lon_to_spherical(self, latitudes, longitudes, device,radius=6371):
         """将经纬度转换为球面坐标 (x, y)"""
@@ -90,82 +88,9 @@ class FourSquare(SequentialDataset):
 
   
 
-    def copy_field_property(self, dest_field, source_field):
-        """Copy properties from ``dest_field`` towards ``source_field``.
+  
 
-        Args:
-            dest_field (str): Destination field.
-            source_field (str): Source field.
-        """
-        self.field2type[dest_field] = self.field2type[source_field]
-        self.field2source[dest_field] = self.field2source[source_field]
-        self.field2seqlen[dest_field] = self.field2seqlen.get(source_field, 0)
-
-    def build(self):
-        """Processing dataset according to evaluation setting, including Group, Order and Split.
-        See :class:`~recbole.config.eval_setting.EvalSetting` for details.
-
-        Returns:
-            list: List of built :class:`Dataset`.
-        """
-        self._change_feat_format()
-
-        if self.benchmark_filename_list is not None:
-            self._drop_unused_col()
-            cumsum = list(np.cumsum(self.file_size_list))
-            datasets = [
-                self.copy(self.inter_feat[start:end])
-                for start, end in zip([0] + cumsum[:-1], cumsum)
-            ]
-            return datasets
-
-        # ordering
-        ordering_args = self.config["eval_args"]["order"]
-        if ordering_args == "RO":
-            self.shuffle()
-        elif ordering_args == "TO":
-            self.sort(by=self.time_field)
-        else:
-            raise NotImplementedError(
-                f"The ordering_method [{ordering_args}] has not been implemented."
-            )
-
-        # splitting & grouping
-        split_args = self.config["eval_args"]["split"]
-        if split_args is None:
-            raise ValueError("The split_args in eval_args should not be None.")
-        if not isinstance(split_args, dict):
-            raise ValueError(f"The split_args [{split_args}] should be a dict.")
-
-        split_mode = list(split_args.keys())[0]
-        assert len(split_args.keys()) == 1
-        group_by = self.config["eval_args"]["group_by"]
-        if split_mode == "RS":
-            if not isinstance(split_args["RS"], list):
-                raise ValueError(f'The value of "RS" [{split_args}] should be a list.')
-            if group_by is None or group_by.lower() == "none":
-                datasets = self.split_by_ratio(split_args["RS"], group_by=None)
-            elif group_by == "user":
-                datasets = self.split_by_ratio(
-                    split_args["RS"], group_by=self.uid_field
-                )
-            else:
-                raise NotImplementedError(
-                    f"The grouping method [{group_by}] has not been implemented."
-                )
-        elif split_mode == "LS":
-            datasets = self.leave_one_out(
-                group_by=self.uid_field, leave_one_mode=split_args["LS"]
-            )
-        else:
-            raise NotImplementedError(
-                f"The splitting_method [{split_mode}] has not been implemented."
-            )
-
-        return datasets
-
-
-class MySampler(RepeatableSampler):
+class MySampler(AbstractSampler):
     """:class:`RepeatableSampler` is used to sample negative items for each input user. The difference from
     :class:`Sampler` is it can only sampling the items that have not appeared at all phases.
 
@@ -187,7 +112,9 @@ class MySampler(RepeatableSampler):
         self.iid_field = dataset.iid_field
         self.user_num = dataset.user_num
         self.item_num = dataset.item_num
-        super().__init__(phases, dataset,distribution=distribution, alpha=alpha)
+        self.used_matrix()
+        super().__init__(distribution=distribution, alpha=alpha)
+    
 
     def used_matrix(self):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -213,12 +140,12 @@ class MySampler(RepeatableSampler):
         result=(mask@inter_bool)>0
 
         indices=result.nonzero(as_tuple=False)
-            
-        used = [set() for _ in range(result.size(0))]
-        for r, c in indices:
-            used[r.item()].add(c.item())
-        self.used_ids = used
+                    
+        temp_dict = {0: {0}}
+        for key, value in indices.tolist():
+            temp_dict.setdefault(key, set()).add(value)
 
+        self.used_ids=list(temp_dict.values())
         #print((result.sum())/inter_bool.sum()) 潜在已知感兴趣对象增加量 
 
         
@@ -235,7 +162,7 @@ class MySampler(RepeatableSampler):
             numpy.ndarray: Used item_ids is the same as positive item_ids.
             Index is user_id, and element is a set of item_ids.
         """
-        return np.array([set() for _ in range(self.user_num)])
+        return self.used_ids
 
     def sample_by_user_ids(self, user_ids, item_ids, num):
         """Sampling by user_ids.
@@ -253,8 +180,7 @@ class MySampler(RepeatableSampler):
             item_id[len(user_ids) * (num - 1) + 1] is sampled for user_ids[1]; ...; and so on.
         """
         try:
-            self.used_matrix()
-            return self.sample_by_key_ids(np.arange(len(user_ids)), num)
+            return self.sample_by_key_ids(user_ids, num)
         except IndexError:
             for user_id in user_ids:
                 if user_id < 0 or user_id >= self.user_num:
