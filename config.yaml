@@ -1,14 +1,17 @@
 gpu_id: '0'
-log_wandb: False
+log_wandb: True
+wandb_project: 'Mamba4POI'
+wandb_entity: "KactusJec" 
+wandb_run_name: "Resume_Training"  
 logging:
   level: DEBUG
 
 # mamba4POI settings
-hidden_size: 96               # (int) Number of features in the hidden state. 
+hidden_size: 192              # (int) Number of features in the hidden state. 
 num_layers: 1                   # (int) Number of Mamba layers.
 dropout_prob: 0.2               # (float) Dropout rate.
 loss_type: 'BPR'                 # (str) Type of loss function. Range in ['BPR', 'CE'].
-d_state: 48                 # (int) SSM state expansion factor
+d_state: 96              # (int) SSM state expansion factor
 d_conv: 4                       # (int) Local convolution width
 expand: 2                    # (int) Block expansion factor
 
@@ -46,10 +49,11 @@ Use_CustomSampler: True
 repeatable: True  #进行阶段隔离
 NEG_PREFIX: "neg_"
 
+model: Mamba4POI
 
 # training settings
 epochs: 200
-train_batch_size: 8192
+train_batch_size: 2048
 learner: adam
 learning_rate: 0.001
 eval_step: 1
@@ -77,7 +81,7 @@ eval_args:
 # evalution settings
 metrics: ['Recall', 'MRR','NDCG']
 valid_metric: Recall@10
-eval_batch_size: 4096
+eval_batch_size: 1024
 weight_decay: 0.0
 topk: [1,5,10,20]
 

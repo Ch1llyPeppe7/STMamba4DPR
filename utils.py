@@ -15,7 +15,7 @@ from torch.nn.utils.clip_grad import clip_grad_norm_
 from tqdm import tqdm
 import torch.cuda.amp as amp
 from recbole.data.dataloader import *
-from recbole.sampler import KGSampler, Sampler
+from recbole.sampler import KGSampler, Sampler,RepeatableSampler
 from recbole.utils import (
     ModelType,
     ensure_dir,

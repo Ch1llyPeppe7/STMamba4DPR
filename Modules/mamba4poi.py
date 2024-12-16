@@ -4,6 +4,7 @@ from Modules.MetaMamba import Mamba
 from recbole.model.abstract_recommender import SequentialRecommender
 from recbole.model.loss import BPRLoss
 from Modules.myutils import *
+
 class Mamba4POI(SequentialRecommender):
     def __init__(self, config, dataset):
         super(Mamba4POI, self).__init__(config, dataset)
@@ -23,9 +24,8 @@ class Mamba4POI(SequentialRecommender):
 
         self.item_embedding,self.user_embedding = self._init_embedding(dataset)
   
-        self.LocNorm = nn.LayerNorm(self.locdim, eps=1e-12)  # 针对地理位置编码
-        self.CatNorm = nn.LayerNorm(self.catdim, eps=1e-12)  # 针对类别嵌入
-
+        self.Norm = nn.LayerNorm(self.locdim, eps=1e-12)  # 针对地理位置编码
+   
         self.dropout = nn.Dropout(self.dropout_prob)
         
         self.mamba_layers = nn.ModuleList([
@@ -93,8 +93,8 @@ class Mamba4POI(SequentialRecommender):
         user_emb=self.user_embedding(user_id).unsqueeze(1).expand(item_seq.shape[0],item_seq.shape[1],-1)
         item_emb = self.item_embedding(item_seq)
         item_emb = self.dropout(item_emb)
-        state_emb = torch.concat((user_emb,self.LocNorm(item_emb[:,:,:self.locdim]),
-                        self.CatNorm(item_emb[:,:,self.locdim:])),dim=2)
+        state_emb = torch.concat((self.Norm(user_emb),self.Norm(item_emb[:,:,:self.locdim]),
+                        self.Norm(item_emb[:,:,self.locdim:])),dim=2)
         for i in range(self.num_layers):
             state_emb = self.mamba_layers[i](state_emb)
         
