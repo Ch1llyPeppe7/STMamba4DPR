@@ -282,7 +282,7 @@ def counting4all(dataset,device):
     categories=category_ids[item_ids]#broadcast
 
     num_users = user_ids.max()+1  #start from 1 padding row 0 with 0
-    num_items = item_ids.max()+1  #start from 1 padding column 0 with 0
+    num_items = dataset.item_feat[dataset.iid_field].max()+1  #start from 1 padding column 0 with 0
     num_category_ids=category_ids.max()+1 #start from 1 padding column 0 with 0
 
     

@@ -42,7 +42,6 @@ from torch.nn.parallel import DistributedDataParallel
 
 
 def create_dataset(config):
-    """重载的 create_dataset 函数"""
     dataset_module = importlib.import_module("recbole.data.dataset")
     
     # 判断是否使用自定义数据集

@@ -1,0 +1,77 @@
+{
+    "os": "Linux-6.8.0-49-generic-x86_64-with-glibc2.17",
+    "python": "3.8.18",
+    "heartbeatAt": "2024-12-16T05:35:45.698455",
+    "startedAt": "2024-12-16T05:35:44.434504",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "<python with no main file>",
+    "codePathLocal": null,
+    "git": {
+        "remote": "git@github.com:Ch1llyPeppe7/Mamba4POI.git",
+        "commit": "fa5bf23e3cd4e351b8ee36efc5a1efa9436ddc76"
+    },
+    "email": "1318508185@qq.com",
+    "root": "/mnt/nvme0n1p2/Files/Code/Mamba/Mamba4POI",
+    "host": "chillypepper",
+    "username": "chillypepper",
+    "executable": "/home/chillypepper/anaconda3/envs/mamba4rec/bin/python",
+    "cpu_count": 6,
+    "cpu_count_logical": 6,
+    "cpu_freq": {
+        "current": 3900.0051666666664,
+        "min": 800.0,
+        "max": 4100.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 3906.078,
+            "min": 800.0,
+            "max": 4100.0
+        },
+        {
+            "current": 3900.191,
+            "min": 800.0,
+            "max": 4100.0
+        },
+        {
+            "current": 3932.203,
+            "min": 800.0,
+            "max": 4100.0
+        },
+        {
+            "current": 3899.775,
+            "min": 800.0,
+            "max": 4100.0
+        },
+        {
+            "current": 3905.551,
+            "min": 800.0,
+            "max": 4100.0
+        },
+        {
+            "current": 3900.005,
+            "min": 800.0,
+            "max": 4100.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 232.6370506286621,
+            "used": 68.08334732055664
+        }
+    },
+    "gpu": "NVIDIA GeForce RTX 2060",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce RTX 2060",
+            "memory_total": 6442450944
+        }
+    ],
+    "memory": {
+        "total": 15.459327697753906
+    }
+}

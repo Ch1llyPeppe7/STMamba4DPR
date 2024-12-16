@@ -7,11 +7,11 @@ logging:
   level: DEBUG
 
 # mamba4POI settings
-hidden_size: 192              # (int) Number of features in the hidden state. 
+hidden_size: 256              # (int) Number of features in the hidden state. 
 num_layers: 1                   # (int) Number of Mamba layers.
 dropout_prob: 0.2               # (float) Dropout rate.
 loss_type: 'BPR'                 # (str) Type of loss function. Range in ['BPR', 'CE'].
-d_state: 96              # (int) SSM state expansion factor
+d_state: 128              # (int) SSM state expansion factor
 d_conv: 4                       # (int) Local convolution width
 expand: 2                    # (int) Block expansion factor
 
@@ -53,7 +53,7 @@ model: Mamba4POI
 
 # training settings
 epochs: 200
-train_batch_size: 2048
+train_batch_size: 4096
 learner: adam
 learning_rate: 0.001
 eval_step: 1
