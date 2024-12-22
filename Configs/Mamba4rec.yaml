@@ -1,0 +1,68 @@
+gpu_id: '0'
+log_wandb: True
+wandb_project: 'Mamba4POI'
+wandb_entity: "KactusJec" 
+wandb_run_name: 'Mamba4recCE128' 
+# mamba4rec settings
+hidden_size: 64                 # (int) Number of features in the hidden state. 
+num_layers: 1                   # (int) Number of Mamba layers.
+dropout_prob: 0.2               # (float) Dropout rate.
+loss_type: 'CE'                 # (str) Type of loss function. Range in ['BPR', 'CE'].
+
+d_state: 32                     # (int) SSM state expansion factor
+d_conv: 4                       # (int) Local convolution width
+expand: 2                       # (int) Block expansion factor
+
+# dataset settings
+dataset: foursquare_NYC
+Use_CustomDataset: True  # 使用自定义的 FourSquareDataset 数据集类
+Use_CustomSampler: False
+repeatable: True  #进行阶段隔离
+NEG_PREFIX: "neg_"
+MAX_ITEM_LIST_LENGTH: 128       # 200 for MovieLens-1M
+
+# dataset: amazon-beauty
+# dataset: amazon-video-games
+# MAX_ITEM_LIST_LENGTH: 50      # 50 for Amazon datasets
+
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: venue_id
+load_col:
+    inter: [user_id, venue_id,timestamp]
+    item: [venue_id,latitude, longitude,venue_category_id]
+
+# user_inter_num_interval: "[5,inf)"
+# item_inter_num_interval: "[5,inf)"
+# model: Mamba4rec
+# train_neg_sample_args: 
+#   distribution: "popularity"
+#   alpha: 0.5
+#   dynamic: False
+#   sample_num: 5
+train_neg_sample_args: ~ #CE
+eval_args:
+  order: TO 
+  spilt: 
+    RS: [0.7,0.1,0.2]
+  gourp_by: user_id
+  max_seq_len: 128 
+  mode:
+    val: full
+    test: full
+
+# training settings
+epochs: 40
+train_batch_size: 512
+learner: adam
+learning_rate: 0.001
+eval_step: 1
+stopping_step: 4
+
+
+# evalution settings
+metrics: ['Recall', 'MRR','NDCG']
+valid_metric: NDCG@10
+eval_batch_size: 512
+weight_decay: 0.0
+topk: [1,5,10,20]
+

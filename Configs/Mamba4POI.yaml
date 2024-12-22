@@ -1,14 +1,19 @@
 gpu_id: '0'
 log_wandb: True
-wandb_project: 'SRGNN'
+wandb_project: 'Mamba4POI'
 wandb_entity: "KactusJec" 
-wandb_run_name: "SRGNN-FSNYC"  
+wandb_run_name: 'CORESTMamba' 
 logging:
   level: DEBUG
 
-embedding_size: 256          # (int) The embedding size of items.
-step: 1                         # (int) The number of layers in GNN.
-loss_type: 'CE'               # (int) Block expansion factor
+# mamba4POI settings
+hidden_size: 128             # (int) Number of features in the hidden state. 
+num_layers: 1                   # (int) Number of Mamba layers.
+dropout_prob: 0.2               # (float) Dropout rate.
+loss_type: 'CE'                 # (str) Type of loss function. Range in ['BPR', 'CE'].
+d_state: 32              # (int) SSM state expansion factor
+d_conv: 4                      # (int) Local convolution width
+expand: 2                   # (int) Block expansion factor
 
 
 # Save Directory Settings
@@ -18,7 +23,7 @@ dataloaders_save_path: ''  # 留空，代码会使用默认路径
 save_dataset: True         # 启用保存dataset功能
 dataset_save_path: 'SavedData/foursquare_NYC-FourSquare.pth'  
 seed: 42  # 设置一个默认种子
-train_neg_sample_args:  null
+
 
 
 #Dataset Settings
@@ -33,7 +38,7 @@ load_col:
 
 
 LIST_SUFFIX: "_list"
-MAX_ITEM_LIST_LENGTH: 32
+MAX_ITEM_LIST_LENGTH: 128
 ITEM_LIST_LENGTH_FIELD: venue_seq_len
 
 
@@ -44,25 +49,30 @@ Use_CustomSampler: False
 repeatable: True  #进行阶段隔离
 NEG_PREFIX: "neg_"
 
-model: SRGNN
+model: Mamba4POI
 
 # training settings
-epochs: 200
-train_batch_size: 4096
+epochs: 100
+train_batch_size: 1024
 learner: adam
 learning_rate: 0.001
 eval_step: 1
-stopping_step: 10
+stopping_step: 4
 single_spec: True
 
-
+# train_neg_sample_args: 
+#   distribution: "popularity"
+#   alpha: 0.5
+#   dynamic: False
+#   sample_num: 5
+train_neg_sample_args: ~ #CE
 
 eval_args:
   order: TO 
   spilt: 
     RS: [0.7,0.1,0.2]
   gourp_by: user_id
-  max_seq_len: 32 
+  max_seq_len: 128 
   mode:
     val: full
     test: full
@@ -71,9 +81,9 @@ eval_args:
 
 # evalution settings
 metrics: ['Recall', 'MRR','NDCG']
-valid_metric: Recall@10
-eval_batch_size: 4096
-weight_decay: 0.01
+valid_metric: NDCG@10
+eval_batch_size: 1024
+weight_decay: 0.0
 topk: [1,5,10,20]
 
 

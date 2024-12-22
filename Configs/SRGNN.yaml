@@ -1,0 +1,87 @@
+gpu_id: '0'
+log_wandb: True
+wandb_project: 'Mamba4POI'
+wandb_entity: "KactusJec" 
+wandb_run_name: 'SRGNN-CE128' 
+logging:
+  level: DEBUG
+
+embedding_size: 256          
+step: 1                        
+loss_type: 'CE'              
+
+
+# Save Directory Settings
+checkpoint_dir: 'SavedData'
+save_dataloaders: True
+dataloaders_save_path: ''  # 留空，代码会使用默认路径
+save_dataset: True         # 启用保存dataset功能
+dataset_save_path: 'SavedData/foursquare_NYC-FourSquare.pth'  
+seed: 42  # 设置一个默认种子
+train_neg_sample_args:  null
+
+
+#Dataset Settings
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: venue_id
+TIME_FIELD: timestamp
+LABEL_FIELD: label
+
+load_col:
+    inter: [user_id, venue_id,timestamp]
+    item: [venue_id,latitude, longitude,venue_category_id]
+
+
+LIST_SUFFIX: "_list"
+MAX_ITEM_LIST_LENGTH: 128
+ITEM_LIST_LENGTH_FIELD: venue_seq_len
+
+
+#Dataloader&Sampler
+dataset: foursquare_NYC
+Use_CustomDataset: True 
+Use_CustomSampler: False
+repeatable: True  #进行阶段隔离
+NEG_PREFIX: "neg_"
+
+model: SRGNN
+
+# training settings
+epochs: 40
+train_batch_size: 1024
+learner: adam
+learning_rate: 0.001
+eval_step: 1
+stopping_step: 4
+single_spec: True
+
+# train_neg_sample_args: 
+#   distribution: "popularity"
+#   alpha: 0.5
+#   dynamic: False
+#   sample_num: 5
+train_neg_sample_args: ~ #CE
+
+eval_args:
+  order: TO 
+  spilt: 
+    RS: [0.7,0.1,0.2]
+  gourp_by: user_id
+  max_seq_len: 128 
+  mode:
+    val: full
+    test: full
+
+
+
+# evalution settings
+metrics: ['Recall', 'MRR','NDCG']
+valid_metric: NDCG@10
+eval_batch_size: 1024
+weight_decay: 0.01
+topk: [1,5,10,20]
+
+
+
+
+

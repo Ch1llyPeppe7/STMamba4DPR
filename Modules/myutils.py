@@ -27,7 +27,7 @@ def UC_SVD(M,k,device):
 def sinusoidal_position_encoding(locations,locdim,device):
     locations=(locations/200).to(device)#<1km dot>0.4
     d=int(locdim/2)
-    print(d)
+
     position_encoding = torch.zeros((locations.shape[0],locdim)).to(device)
     for i in range(0, d, 2):
         position_encoding[:, i] = torch.sin(locations[:,0] * (-i / d)**3)
@@ -36,6 +36,8 @@ def sinusoidal_position_encoding(locations,locdim,device):
         position_encoding[:,d+i + 1] = torch.cos(locations[:,1] *(-(i + 1) / d)**3)
 
     return position_encoding.cpu()
+
+
 
 def user_location_affinity_matrix(center_X,center_Y,width,height,device):
     #不同用户对同一用户的相似度在同一尺度上 

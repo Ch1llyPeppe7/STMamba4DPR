@@ -46,7 +46,151 @@ def unixTime2periodicVector(unitTime, components=None):
 
     # 将返回值从 numpy 转为 torch.Tensor
     return torch.tensor(periodic_vector, dtype=torch.float32)
+class UserDefinedTransform:
+    def __init__(self, config):
+        self.ITEM_SEQ = config["ITEM_ID_FIELD"] + config["LIST_SUFFIX"]
+        self.ITEM_ID = config["ITEM_ID_FIELD"]
+        self.MASK_ITEM_SEQ = "Mask_" + self.ITEM_SEQ
+        self.POS_ITEMS = "Pos_" + config["ITEM_ID_FIELD"]
+        self.NEG_ITEMS = "Neg_" + config["ITEM_ID_FIELD"]
+        self.max_seq_length = config["MAX_ITEM_LIST_LENGTH"]
+        self.mask_ratio = config["mask_ratio"]
+        self.ft_ratio = 0 if not hasattr(config, "ft_ratio") else config["ft_ratio"]
+        self.mask_item_length = int(self.mask_ratio * self.max_seq_length)
+        self.MASK_INDEX = "MASK_INDEX"
+        config["MASK_INDEX"] = "MASK_INDEX"
+        config["MASK_ITEM_SEQ"] = self.MASK_ITEM_SEQ
+        config["POS_ITEMS"] = self.POS_ITEMS
+        config["NEG_ITEMS"] = self.NEG_ITEMS
+        self.ITEM_SEQ_LEN = config["ITEM_LIST_LENGTH_FIELD"]
+        self.config = config
 
+    def _neg_sample(self, item_set, n_items):
+        item = random.randint(1, n_items - 1)
+        while item in item_set:
+            item = random.randint(1, n_items - 1)
+        return item
+
+    def _padding_sequence(self, sequence, max_length):
+        pad_len = max_length - len(sequence)
+        sequence = [0] * pad_len + sequence
+        sequence = sequence[-max_length:]  # truncate according to the max_length
+        return sequence
+
+    def _append_mask_last(self, interaction, n_items, device):
+        batch_size = interaction[self.ITEM_SEQ].size(0)
+        pos_items, neg_items, masked_index, masked_item_sequence = [], [], [], []
+        seq_instance = interaction[self.ITEM_SEQ].cpu().numpy().tolist()
+        item_seq_len = interaction[self.ITEM_SEQ_LEN].cpu().numpy().tolist()
+        for instance, lens in zip(seq_instance, item_seq_len):
+            mask_seq = instance.copy()
+            ext = instance[lens - 1]
+            mask_seq[lens - 1] = n_items
+            masked_item_sequence.append(mask_seq)
+            pos_items.append(self._padding_sequence([ext], self.mask_item_length))
+            neg_items.append(
+                self._padding_sequence(
+                    [self._neg_sample(instance, n_items)], self.mask_item_length
+                )
+            )
+            masked_index.append(
+                self._padding_sequence([lens - 1], self.mask_item_length)
+            )
+        # [B Len]
+        masked_item_sequence = torch.tensor(
+            masked_item_sequence, dtype=torch.long, device=device
+        ).view(batch_size, -1)
+        # [B mask_len]
+        pos_items = torch.tensor(pos_items, dtype=torch.long, device=device).view(
+            batch_size, -1
+        )
+        # [B mask_len]
+        neg_items = torch.tensor(neg_items, dtype=torch.long, device=device).view(
+            batch_size, -1
+        )
+        # [B mask_len]
+        masked_index = torch.tensor(masked_index, dtype=torch.long, device=device).view(
+            batch_size, -1
+        )
+        new_dict = {
+            self.MASK_ITEM_SEQ: masked_item_sequence,
+            self.POS_ITEMS: pos_items,
+            self.NEG_ITEMS: neg_items,
+            self.MASK_INDEX: masked_index,
+        }
+        ft_interaction = deepcopy(interaction)
+        ft_interaction.update(Interaction(new_dict))
+        return ft_interaction
+
+    def __call__(self, dataset, interaction):
+        item_seq = interaction[self.ITEM_SEQ]
+        device = item_seq.device
+        batch_size = item_seq.size(0)
+        n_items = dataset.num(self.ITEM_ID)
+        sequence_instances = item_seq.cpu().numpy().tolist()
+
+        # Masked Item Prediction
+        # [B * Len]
+        masked_item_sequence = []
+        pos_items = []
+        neg_items = []
+        masked_index = []
+
+        if random.random() < self.ft_ratio:
+            interaction = self._append_mask_last(interaction, n_items, device)
+        else:
+            for instance in sequence_instances:
+                # WE MUST USE 'copy()' HERE!
+                masked_sequence = instance.copy()
+                pos_item = []
+                neg_item = []
+                index_ids = []
+                for index_id, item in enumerate(instance):
+                    # padding is 0, the sequence is end
+                    if item == 0:
+                        break
+                    prob = random.random()
+                    if prob < self.mask_ratio:
+                        pos_item.append(item)
+                        neg_item.append(self._neg_sample(instance, n_items))
+                        masked_sequence[index_id] = n_items
+                        index_ids.append(index_id)
+
+                masked_item_sequence.append(masked_sequence)
+                pos_items.append(
+                    self._padding_sequence(pos_item, self.mask_item_length)
+                )
+                neg_items.append(
+                    self._padding_sequence(neg_item, self.mask_item_length)
+                )
+                masked_index.append(
+                    self._padding_sequence(index_ids, self.mask_item_length)
+                )
+
+            # [B Len]
+            masked_item_sequence = torch.tensor(
+                masked_item_sequence, dtype=torch.long, device=device
+            ).view(batch_size, -1)
+            # [B mask_len]
+            pos_items = torch.tensor(pos_items, dtype=torch.long, device=device).view(
+                batch_size, -1
+            )
+            # [B mask_len]
+            neg_items = torch.tensor(neg_items, dtype=torch.long, device=device).view(
+                batch_size, -1
+            )
+            # [B mask_len]
+            masked_index = torch.tensor(
+                masked_index, dtype=torch.long, device=device
+            ).view(batch_size, -1)
+            new_dict = {
+                self.MASK_ITEM_SEQ: masked_item_sequence,
+                self.POS_ITEMS: pos_items,
+                self.NEG_ITEMS: neg_items,
+                self.MASK_INDEX: masked_index,
+            }
+            interaction.update(Interaction(new_dict))
+        return interaction
 # 定义 FourSquare 类
 class FourSquare(SequentialDataset):
     def __init__(self, config):
@@ -57,7 +201,9 @@ class FourSquare(SequentialDataset):
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.item_feat['longitude'],self.item_feat['latitude']= self.lat_lon_to_spherical(latitude, longitude,device)
- 
+    
+    def sort(self, by, ascending=True):
+        self.inter_feat.sort(by=by, ascending=ascending)
         
     def get_POI_KDTree(self):
         itemX=(self.item_feat["longitude"]).numpy()

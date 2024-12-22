@@ -4,7 +4,7 @@ from Modules.MetaMamba import Mamba
 from recbole.model.abstract_recommender import SequentialRecommender
 from recbole.model.loss import BPRLoss
 from Modules.myutils import *
-
+import torch.nn.functional as F
 class Mamba4POI(SequentialRecommender):
     def __init__(self, config, dataset):
         super(Mamba4POI, self).__init__(config, dataset)
@@ -13,11 +13,14 @@ class Mamba4POI(SequentialRecommender):
         self.num_layers = config["num_layers"]
         self.dropout_prob = config["dropout_prob"]
         
+        self.sess_dropout = nn.Dropout(config["sess_dropout"])
+        self.item_dropout = nn.Dropout(config["item_dropout"])
+        self.temperature = config["temperature"]
+        
         # Hyperparameters for Mamba block
         self.d_state = config["d_state"]
         self.d_conv = config["d_conv"]
         self.expand = config["expand"]
-        self.TIME_FIELD=config['TIME_FIELD']
         self.TIME_SEQ_FIELD=config['TIME_FIELD']+config['LIST_SUFFIX']
         self.locdim=int(self.hidden_size/2)
         self.catdim=int(self.hidden_size/2)
@@ -27,6 +30,7 @@ class Mamba4POI(SequentialRecommender):
         self.itembase_embedding = nn.Embedding(
             self.num_items, self.locdim, padding_idx=0
         )
+        #self.itembase_embedding.requires_grad_=False
         self.userbase_embedding = nn.Embedding(
             self.num_users, self.locdim, padding_idx=0
         )
@@ -100,12 +104,12 @@ class Mamba4POI(SequentialRecommender):
         self.itemC=itemC.clone().to(self.device)
        
         Locations=torch.stack([itemX,itemY],dim=1)
-        #centerx,centery,_,_=active_center_point(IM,Uim,itemX,itemY,self.device)
+        centerx,centery,_,_=active_center_point(IM,Uim,itemX,itemY,self.device)
         
-        #UsrLocations=torch.stack([centerx,centery],dim=1)
+        UsrLocations=torch.stack([centerx,centery],dim=1)
         
         ItemLocEnco=sinusoidal_position_encoding(Locations,self.locdim,self.device)
-        #UsrLocEnco=sinusoidal_position_encoding(UsrLocations,self.locdim,self.device)
+        UsrLocEnco=sinusoidal_position_encoding(UsrLocations,self.locdim,self.device)
 
         itemcat_embedding = nn.Embedding.from_pretrained(
             Ec[itemC], freeze=False
@@ -119,13 +123,13 @@ class Mamba4POI(SequentialRecommender):
             ItemLocEnco, freeze=True
         )
 
-        #userloc_embedding = nn.Embedding.from_pretrained(
-        #    UsrLocEnco, freeze=True
-        #)
+        userloc_embedding = nn.Embedding.from_pretrained(
+            UsrLocEnco, freeze=True
+        )
 
         self.num_items=ItemLocEnco.shape[0]
         self.num_users=num_user
-        return itemloc_embedding,itemcat_embedding,None,None
+        return itemloc_embedding,itemcat_embedding,userloc_embedding,usercat_embedding
 
 
     def _init_weights(self, module):
@@ -137,48 +141,29 @@ class Mamba4POI(SequentialRecommender):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
-    def sinusoidal_time_encoding(self,TimeTensor,TimeDim,Term='day'):
-        d=TimeDim
-        TermDict={'day':86400,'week':604800,'month': 18144000}
-        Threshold=TermDict[Term]
-        TimeTensor=(TimeTensor.unsqueeze(2)%Threshold)/4320
-        batch_size, seq_len = TimeTensor.shape[0], TimeTensor.shape[1]
-
-        # 使用 sin 和 cos 同时计算
-        i = torch.arange(0, d, device=self.device).float()
-        sin_encoding = torch.sin(TimeTensor[:, :, 0:1] * (-i[::2] / d)**3)
-        cos_encoding = torch.cos(TimeTensor[:, :, 0:1] * (-i[1::2] / d)**3)
-        
-        # 拼接生成最终编码
-        time_encoding = torch.zeros((batch_size, seq_len, d), device=self.device)
-        time_encoding[:, :, 0::2] = sin_encoding
-        time_encoding[:, :, 1::2] = cos_encoding
-        
-        return time_encoding
-
-    def forward(self, item_seq, item_seq_len,time_seq):
+    def forward(self, item_seq, item_seq_len,user_list):
         LocState=self.Norm(self.itemloc_embedding(item_seq))
         EmbState=self.Norm(self.itembase_embedding(item_seq))
-        TimeState=self.Norm(self.sinusoidal_time_encoding(time_seq,self.locdim))
-       
-        ItemState=LocState+EmbState+TimeState
-        State=ItemState
+        UsrBase=self.Norm(self.userbase_embedding(user_list))
+        UsrLoc=self.Norm(self.userloc_embedding(user_list))
+        
+        Start=UsrBase.unsqueeze(1)+LocState[:,0,:]
+        ItemState=LocState+EmbState
+        State=ItemState#torch.concat((Start,ItemState),dim=1)
 
         for i in range(self.num_layers):
             State = self.LocMamba[i](State)
-       
+
         Seq_output=self.gather_indexes(State, item_seq_len - 1)
-        return Seq_output
+        return Seq_output,None#self.lag_constrain(State)
 
     def calculate_loss(self, interaction):
         item_seq = interaction[self.ITEM_SEQ]
         item_seq_len = interaction[self.ITEM_SEQ_LEN]
-        time_seq=interaction[self.TIME_SEQ_FIELD].to()
+        user_list=interaction[self.USER_ID]
+        item_output,lag_constrain = self.forward(item_seq, item_seq_len,user_list)
 
-        item_output = self.forward(item_seq, item_seq_len,time_seq)
-        
         pos_items = interaction[self.POS_ITEM_ID]
-        pos_time=self.sinusoidal_time_encoding(interaction[self.TIME_FIELD].unsqueeze(0),self.locdim).squeeze(0)
 
         if self.loss_type == "BPR":
             neg_items = interaction[self.NEG_ITEM_ID]
@@ -186,39 +171,40 @@ class Mamba4POI(SequentialRecommender):
             neg_items_emb = self.item_embedding(neg_items)
             pos_score = torch.mean(item_output * pos_items_emb, dim=-1) +torch.mean(item_output * pos_items_emb, dim=-1)  # [B]
             neg_score =torch.mean(item_output * neg_items_emb, dim=-1)+torch.mean(item_output * neg_items_emb, dim=-1)  # [B]
-            loss = self.loss_fct(pos_score, neg_score)
+            loss = self.loss_fct(pos_score, neg_score)#+lag_constrain
             return loss
         else:  # self.loss_type = 'CE'
-            test_item_emb = self.item_embedding()
-            logits = torch.matmul(item_output, 
-                        test_item_emb.transpose(0, 1))+(pos_time*item_output).sum(1).unsqueeze(1)
-            loss = self.loss_fct(logits, pos_items)
+            test_item_emb = self.item_dropout(self.item_embedding())
+            test_item_emb = F.normalize(test_item_emb, dim=-1)
+            logits = torch.matmul(item_output, test_item_emb.transpose(0, 1))/self.temperature
+            loss = self.loss_fct(logits, pos_items)#+lag_constrain
         torch.cuda.empty_cache()    
         return loss
        
-
+    def lag_constrain(self,input_tensor):
+        return -(input_tensor[:,1:,:]*input_tensor[:,:-1,:]).sum(2).mean()
 
     def predict(self, interaction):
         item_seq = interaction[self.ITEM_SEQ]
         item_seq_len = interaction[self.ITEM_SEQ_LEN]
         test_item = interaction[self.ITEM_ID]
-        time_seq=interaction[self.TIME_SEQ_FIELD]
-        item_output = self.forward(item_seq, item_seq_len,time_seq)
-        
-        pos_time=self.sinusoidal_time_encoding(interaction[self.TIME_FIELD].unsqueeze(0),self.locdim).squeeze(0)
+        user_list=interaction[self.USER_ID]
+
+        item_output,_ = self.forward(item_seq, item_seq_len,user_list)
+    
     
         test_item_emb = self.item_embedding(test_item)
         
-        scores = torch.mul(item_output, test_item_emb).sum(dim=1)+(pos_time*item_output).sum(1).unsqueeze(1)  # [B]
+        scores = torch.mul(item_output, test_item_emb).sum(dim=1)  # [B]
         return scores
 
     def full_sort_predict(self, interaction):
         item_seq = interaction[self.ITEM_SEQ]
         item_seq_len = interaction[self.ITEM_SEQ_LEN]
-        
-        time_seq=interaction[self.TIME_SEQ_FIELD]
-        item_output = self.forward(item_seq, item_seq_len,time_seq)
+        user_list=interaction[self.USER_ID]
 
+        item_output,_ = self.forward(item_seq, item_seq_len,user_list)
+        
 
         test_items_emb = self.item_embedding()
         scores = torch.matmul(
@@ -259,15 +245,6 @@ class MambaLayer(nn.Module):
         hidden_states = self.ffn(hidden_states)
         return hidden_states
     
-class ReverseMessagePassing(nn.Module):
-    def __init__(self,catdim,locdim):
-        super().__init__()
-        self.catdim=catdim
-        self.locdim=locdim
-    def forward(self, E):
-        KQ=torch.einsum('bld,bld->bl1', E[:,:,:-1], E[:,:,1:])
-    
-        return 
 
 
 class FeedForward(nn.Module):

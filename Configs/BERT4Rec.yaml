@@ -1,0 +1,97 @@
+gpu_id: '0'
+log_wandb: True
+wandb_project: 'Mamba4POI'
+wandb_entity: "KactusJec" 
+wandb_run_name: 'BERT4Rec32' 
+logging:
+  level: DEBUG
+  
+n_layers: 2                     # (int) The number of transformer layers in transformer encoder.
+n_heads: 2                      # (int) The number of attention heads for multi-head attention layer.
+hidden_size: 128                 # (int) The number of features in the hidden state.
+inner_size: 64                 # (int) The inner hidden size in feed-forward layer.
+hidden_dropout_prob: 0.2        # (float) The probability of an element to be zeroed.
+attn_dropout_prob: 0.2          # (float) The probability of an attention score to be zeroed.
+hidden_act: 'gelu'              # (str) The activation function in feed-forward layer.
+layer_norm_eps: 1e-12           # (float) A value added to the denominator for numerical stability.
+initializer_range: 0.02         # (float) The standard deviation for normal initialization.
+mask_ratio: 0.2                 # (float) The probability for a item replaced by MASK token.
+loss_type: 'CE'                 # (str) The type of loss function.
+transform: mask_itemseq         # (str) The transform operation for batch data process.
+ft_ratio: 0.0                   # (float) The probability of generating fine-tuning samples
+
+
+# Save Directory Settings
+checkpoint_dir: 'SavedData'
+save_dataloaders: True
+dataloaders_save_path: ''  # 留空，代码会使用默认路径
+save_dataset: True         # 启用保存dataset功能
+dataset_save_path: 'SavedData/foursquare_NYC-FourSquare.pth'  
+seed: 42  # 设置一个默认种子
+
+
+
+#Dataset Settings
+POS_ITEMS: Pos_venue_id
+NEG_ITEMS: Neg_venue_id
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: venue_id
+TIME_FIELD: timestamp
+LABEL_FIELD: label
+MASK_INDEX:  MASK_INDEX
+MASK_ITEM_SEQ: Mask_venue_id_list
+load_col:
+    inter: [user_id, venue_id,timestamp]
+    item: [venue_id,latitude, longitude,venue_category_id]
+
+
+LIST_SUFFIX: "_list"
+MAX_ITEM_LIST_LENGTH: 32
+ITEM_LIST_LENGTH_FIELD: venue_seq_len
+train_neg_sample_args: null
+
+#Dataloader&Sampler
+dataset: foursquare_NYC
+Use_CustomDataset: True  # 使用自定义的 FourSquareDataset 数据集类
+Use_CustomSampler: False
+repeatable: True  #进行阶段隔离
+
+
+
+model: BERT4Rec
+
+# training settings
+epochs: 40
+train_batch_size: 1024
+learner: adam
+eval_step: 1
+stopping_step: 4
+
+delta: 0.001  
+
+single_spec: True
+
+
+eval_args:
+  order: TO 
+  spilt: 
+    RS: [0.7,0.1,0.2]
+  gourp_by: user_id
+  max_seq_len: 32 
+  mode:
+    val: full
+    test: full
+
+
+
+# evalution settings
+metrics: ['Recall', 'MRR','NDCG']
+valid_metric: NDCG@10
+eval_batch_size: 1024
+weight_decay: 0.01
+topk: [1,5,10,20]
+
+
+
+
+

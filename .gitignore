@@ -1,3 +1,4 @@
 *.pth
 *.log
 log_tensorboard/
+wandb/

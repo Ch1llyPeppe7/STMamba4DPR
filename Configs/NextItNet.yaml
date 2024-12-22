@@ -2,18 +2,17 @@ gpu_id: '0'
 log_wandb: True
 wandb_project: 'Mamba4POI'
 wandb_entity: "KactusJec" 
-wandb_run_name: "Resume_Training"  
+wandb_run_name: 'NextItNet' 
 logging:
   level: DEBUG
 
-# mamba4POI settings
-hidden_size: 256              # (int) Number of features in the hidden state. 
-num_layers: 1                   # (int) Number of Mamba layers.
-dropout_prob: 0.2               # (float) Dropout rate.
-loss_type: 'BPR'                 # (str) Type of loss function. Range in ['BPR', 'CE'].
-d_state: 128              # (int) SSM state expansion factor
-d_conv: 4                       # (int) Local convolution width
-expand: 2                    # (int) Block expansion factor
+
+embedding_size: 64              # (int) The embedding size of users and items.
+kernel_size: 3                  # (int) The width of convolutional filter.
+block_num: 5                    # (int) The number of residual blocks.
+dilations: [1,4]                # (list of int) Control the spacing between the kernel points.
+reg_weight: 1e-5                # (float) The L2 regularization weight. 
+loss_type: 'CE'                 # (str)  The type of loss function. Range in ['BPR', 'CE'].
 
 
 # Save Directory Settings
@@ -38,40 +37,41 @@ load_col:
 
 
 LIST_SUFFIX: "_list"
-MAX_ITEM_LIST_LENGTH: 32
+MAX_ITEM_LIST_LENGTH: 128
 ITEM_LIST_LENGTH_FIELD: venue_seq_len
 
 
 #Dataloader&Sampler
 dataset: foursquare_NYC
 Use_CustomDataset: True  # 使用自定义的 FourSquareDataset 数据集类
-Use_CustomSampler: True
+Use_CustomSampler: False
 repeatable: True  #进行阶段隔离
 NEG_PREFIX: "neg_"
 
 model: Mamba4POI
 
 # training settings
-epochs: 200
-train_batch_size: 4096
+epochs: 40
+train_batch_size: 1024
 learner: adam
 learning_rate: 0.001
 eval_step: 1
-stopping_step: 10
+stopping_step: 4
 single_spec: True
 
-train_neg_sample_args: 
-  distribution: "popularity"
-  alpha: 0.5
-  dynamic: False
-  sample_num: 2
+# train_neg_sample_args: 
+#   distribution: "popularity"
+#   alpha: 0.5
+#   dynamic: False
+#   sample_num: 5
+train_neg_sample_args: ~ #CE
 
 eval_args:
   order: TO 
   spilt: 
     RS: [0.7,0.1,0.2]
   gourp_by: user_id
-  max_seq_len: 32 
+  max_seq_len: 128 
   mode:
     val: full
     test: full
@@ -80,7 +80,7 @@ eval_args:
 
 # evalution settings
 metrics: ['Recall', 'MRR','NDCG']
-valid_metric: Recall@10
+valid_metric: NDCG@10
 eval_batch_size: 1024
 weight_decay: 0.0
 topk: [1,5,10,20]
