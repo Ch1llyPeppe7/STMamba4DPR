@@ -1,2 +1,6 @@
-# Mamba4POI
-This project based on Mamba4rec is to address the limitation of static sequence recommendation on POI task, which is highly dependent on the geographic and periodicty of the interactions.
+The next Point-of-interest (POI) recommendation predicts user destinations based on potential interest and has garnered significant attention as a key application in location-based social networks (LBSNs). However, it still faces significant challenges from both popularity bias and exposure bias, which hinder the accurate representation of POIs and users for balanced and effective recommendation.
+
+To address these issues, we propose Spatio-temporal Trajectory Mamba for Debiased Point-of-interest Recommendation STMamba4DPR, which integrates an extended global position encoding method with Mamba.
+
+By combining the designed Location-Aware and Period-Aware Position Encoder (LAPE & PAPE), we effectively leverage the flexible modeling capability of the state-space model. This approach improves the accuracy, diversity and fairness of the recommendations by leveraging collaborative filtering signals based on the trajectory and effectively capture the evolution of user preferences over time.
+Experiments on three real-world datasets demonstrate that STMamba4DPR successfully addresse the popularity bias and exposure bias by mitigating semantic information dilution and enhances the flexibility of preference state representation. Our method outperforms existing approaches in recommendation accuracy, while also ensuring better diversity and fairness in the results.
