@@ -14,7 +14,7 @@ from recbole.utils import (
     ensure_dir,
 )
 from Modules.myutils import *
-from recbole.sampler import AbstractSampler
+from recbole.sampler import Sampler
 from collections import Counter
 import copy
 from scipy.spatial import KDTree
@@ -236,7 +236,7 @@ class FourSquare(SequentialDataset):
 
   
 
-class MySampler(AbstractSampler):
+class MySampler(Sampler):
     """:class:`RepeatableSampler` is used to sample negative items for each input user. The difference from
     :class:`Sampler` is it can only sampling the items that have not appeared at all phases.
 

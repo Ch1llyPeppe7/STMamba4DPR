@@ -2,29 +2,30 @@ gpu_id: '0'
 log_wandb: True
 wandb_project: 'Mamba4POI'
 wandb_entity: "KactusJec" 
-wandb_run_name: 'CORESTMamba' 
+wandb_run_name: '2DSTMamba_NYC' 
 logging:
   level: DEBUG
 
 # mamba4POI settings
-hidden_size: 128             # (int) Number of features in the hidden state. 
-num_layers: 1                   # (int) Number of Mamba layers.
+hidden_size: 128           # (int) Number of features in the hidden state. 
+num_layers: 2                   # (int) Number of Mamba layers.
 dropout_prob: 0.2               # (float) Dropout rate.
 loss_type: 'CE'                 # (str) Type of loss function. Range in ['BPR', 'CE'].
 d_state: 32              # (int) SSM state expansion factor
 d_conv: 4                      # (int) Local convolution width
 expand: 2                   # (int) Block expansion factor
-
+Term: 'day'
 
 # Save Directory Settings
 checkpoint_dir: 'SavedData'
-save_dataloaders: True
+save_dataloaders: False
 dataloaders_save_path: ''  # 留空，代码会使用默认路径
 save_dataset: True         # 启用保存dataset功能
-dataset_save_path: 'SavedData/foursquare_NYC-FourSquare.pth'  
+dataset: foursquare_NYC
+dataset_save_path: 'SavedData/foursquare_NYC.pth' 
 seed: 42  # 设置一个默认种子
 
-
+num_workers: 4  
 
 #Dataset Settings
 USER_ID_FIELD: user_id
@@ -34,7 +35,7 @@ LABEL_FIELD: label
 
 load_col:
     inter: [user_id, venue_id,timestamp]
-    item: [venue_id,latitude, longitude,venue_category_id]
+    item: [venue_id,latitude, longitude]
 
 
 LIST_SUFFIX: "_list"
@@ -42,8 +43,7 @@ MAX_ITEM_LIST_LENGTH: 128
 ITEM_LIST_LENGTH_FIELD: venue_seq_len
 
 
-#Dataloader&Sampler
-dataset: foursquare_NYC
+#encoding: ISO-8859-1
 Use_CustomDataset: True  # 使用自定义的 FourSquareDataset 数据集类
 Use_CustomSampler: False
 repeatable: True  #进行阶段隔离
@@ -52,7 +52,7 @@ NEG_PREFIX: "neg_"
 model: Mamba4POI
 
 # training settings
-epochs: 100
+epochs: 50
 train_batch_size: 1024
 learner: adam
 learning_rate: 0.001
@@ -70,7 +70,7 @@ train_neg_sample_args: ~ #CE
 eval_args:
   order: TO 
   spilt: 
-    RS: [0.7,0.1,0.2]
+    RS: [0.7,0.1,0.3]
   gourp_by: user_id
   max_seq_len: 128 
   mode:
@@ -79,12 +79,13 @@ eval_args:
 
 
 
-# evalution settings
-metrics: ['Recall', 'MRR','NDCG']
+metrics: ['Recall', 'MRR','NDCG','ItemCoverage','AveragePopularity','TailPercentage']
 valid_metric: NDCG@10
 eval_batch_size: 1024
-weight_decay: 0.0
+weight_decay: 0
 topk: [1,5,10,20]
+tail_ratio: 0.15
+
 
 
 

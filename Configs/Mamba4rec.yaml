@@ -2,44 +2,71 @@ gpu_id: '0'
 log_wandb: True
 wandb_project: 'Mamba4POI'
 wandb_entity: "KactusJec" 
-wandb_run_name: 'Mamba4recCE128' 
-# mamba4rec settings
-hidden_size: 64                 # (int) Number of features in the hidden state. 
+wandb_run_name: 'Mamba4rec_TKY' 
+logging:
+  level: DEBUG
+
+# mamba4POI settings
+hidden_size: 128           # (int) Number of features in the hidden state. 
 num_layers: 1                   # (int) Number of Mamba layers.
 dropout_prob: 0.2               # (float) Dropout rate.
 loss_type: 'CE'                 # (str) Type of loss function. Range in ['BPR', 'CE'].
+d_state: 32              # (int) SSM state expansion factor
+d_conv: 4                      # (int) Local convolution width
+expand: 2                   # (int) Block expansion factor
+Term: 'day'
 
-d_state: 32                     # (int) SSM state expansion factor
-d_conv: 4                       # (int) Local convolution width
-expand: 2                       # (int) Block expansion factor
+# Save Directory Settings
+checkpoint_dir: 'SavedData'
+save_dataloaders: False
+dataloaders_save_path: ''  # 留空，代码会使用默认路径
+save_dataset: True         # 启用保存dataset功能
+dataset: foursquare_TKY
+dataset_save_path: 'SavedData/foursquare_TKY.pth' 
+seed: 42  # 设置一个默认种子
 
-# dataset settings
-dataset: foursquare_NYC
+num_workers: 4  
+
+#Dataset Settings
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: venue_id
+TIME_FIELD: timestamp
+LABEL_FIELD: label
+
+load_col:
+    inter: [user_id, venue_id,timestamp]
+    item: [venue_id,latitude, longitude]
+
+
+LIST_SUFFIX: "_list"
+MAX_ITEM_LIST_LENGTH: 128
+ITEM_LIST_LENGTH_FIELD: venue_seq_len
+
+
+#encoding: ISO-8859-1
 Use_CustomDataset: True  # 使用自定义的 FourSquareDataset 数据集类
 Use_CustomSampler: False
 repeatable: True  #进行阶段隔离
 NEG_PREFIX: "neg_"
-MAX_ITEM_LIST_LENGTH: 128       # 200 for MovieLens-1M
 
-# dataset: amazon-beauty
-# dataset: amazon-video-games
-# MAX_ITEM_LIST_LENGTH: 50      # 50 for Amazon datasets
+model: Mamba4POI
 
-USER_ID_FIELD: user_id
-ITEM_ID_FIELD: venue_id
-load_col:
-    inter: [user_id, venue_id,timestamp]
-    item: [venue_id,latitude, longitude,venue_category_id]
+# training settings
+epochs: 50
+train_batch_size: 1024
+learner: adam
+learning_rate: 0.001
+eval_step: 1
+stopping_step: 4
+single_spec: True
 
-# user_inter_num_interval: "[5,inf)"
-# item_inter_num_interval: "[5,inf)"
-# model: Mamba4rec
 # train_neg_sample_args: 
 #   distribution: "popularity"
 #   alpha: 0.5
 #   dynamic: False
 #   sample_num: 5
 train_neg_sample_args: ~ #CE
+
 eval_args:
   order: TO 
   spilt: 
@@ -50,19 +77,12 @@ eval_args:
     val: full
     test: full
 
-# training settings
-epochs: 40
-train_batch_size: 512
-learner: adam
-learning_rate: 0.001
-eval_step: 1
-stopping_step: 4
 
 
-# evalution settings
-metrics: ['Recall', 'MRR','NDCG']
+metrics: ['Recall', 'MRR','NDCG','ItemCoverage','AveragePopularity','TailPercentage']
 valid_metric: NDCG@10
-eval_batch_size: 512
-weight_decay: 0.0
+eval_batch_size: 1024
+weight_decay: 0
 topk: [1,5,10,20]
+tail_ratio: 0.15
 

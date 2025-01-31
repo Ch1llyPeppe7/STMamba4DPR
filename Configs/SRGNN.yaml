@@ -2,21 +2,22 @@ gpu_id: '0'
 log_wandb: True
 wandb_project: 'Mamba4POI'
 wandb_entity: "KactusJec" 
-wandb_run_name: 'SRGNN-CE128' 
+wandb_run_name: 'SRGNN_GWL' 
 logging:
   level: DEBUG
 
-embedding_size: 256          
+embedding_size: 256      
 step: 1                        
 loss_type: 'CE'              
 
 
 # Save Directory Settings
 checkpoint_dir: 'SavedData'
-save_dataloaders: True
+save_dataloaders: False
 dataloaders_save_path: ''  # 留空，代码会使用默认路径
 save_dataset: True         # 启用保存dataset功能
-dataset_save_path: 'SavedData/foursquare_NYC-FourSquare.pth'  
+dataset: gowalla
+dataset_save_path: 'SavedData/gowalla.pth'  
 seed: 42  # 设置一个默认种子
 train_neg_sample_args:  null
 
@@ -29,16 +30,14 @@ LABEL_FIELD: label
 
 load_col:
     inter: [user_id, venue_id,timestamp]
-    item: [venue_id,latitude, longitude,venue_category_id]
-
+    item: [venue_id,latitude, longitude]
 
 LIST_SUFFIX: "_list"
-MAX_ITEM_LIST_LENGTH: 128
+MAX_ITEM_LIST_LENGTH: 32
 ITEM_LIST_LENGTH_FIELD: venue_seq_len
 
 
-#Dataloader&Sampler
-dataset: foursquare_NYC
+
 Use_CustomDataset: True 
 Use_CustomSampler: False
 repeatable: True  #进行阶段隔离
@@ -67,7 +66,7 @@ eval_args:
   spilt: 
     RS: [0.7,0.1,0.2]
   gourp_by: user_id
-  max_seq_len: 128 
+  max_seq_len: 32 
   mode:
     val: full
     test: full
@@ -75,11 +74,12 @@ eval_args:
 
 
 # evalution settings
-metrics: ['Recall', 'MRR','NDCG']
+metrics: ['Recall', 'MRR','NDCG','ItemCoverage','AveragePopularity','TailPercentage']
 valid_metric: NDCG@10
 eval_batch_size: 1024
 weight_decay: 0.01
 topk: [1,5,10,20]
+tail_ratio: 0.15
 
 
 

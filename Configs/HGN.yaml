@@ -2,7 +2,7 @@ gpu_id: '0'
 log_wandb: True
 wandb_project: 'Mamba4POI'
 wandb_entity: "KactusJec" 
-wandb_run_name: 'HGN' 
+wandb_run_name: 'HGN_GWL' 
 logging:
   level: DEBUG
 
@@ -12,14 +12,14 @@ loss_type: 'CE'                 # (str) The type of loss function. Range in ['BP
 pooling_type: "average"         # (str) The type of pooling include average pooling and max pooling.
 reg_weight: [0.00,0.00]         # (list of float) The L2 regularization weight.                   # (float) Weight parameter to calculate the similarity.               # (str) The type of loss function. Range in ['BPR', 'CE'].
 
-# Save Directory Settings
 checkpoint_dir: 'SavedData'
-save_dataloaders: True
+save_dataloaders: False
 dataloaders_save_path: ''  # 留空，代码会使用默认路径
 save_dataset: True         # 启用保存dataset功能
-dataset_save_path: 'SavedData/foursquare_NYC-FourSquare.pth'  
+dataset: gowalla
+dataset_save_path: 'SavedData/gowalla.pth' 
 seed: 42  # 设置一个默认种子
-
+train_neg_sample_args:  null
 
 
 #Dataset Settings
@@ -30,22 +30,19 @@ LABEL_FIELD: label
 
 load_col:
     inter: [user_id, venue_id,timestamp]
-    item: [venue_id,latitude, longitude,venue_category_id]
-
+    item: [venue_id,latitude, longitude]
 
 LIST_SUFFIX: "_list"
 MAX_ITEM_LIST_LENGTH: 128
 ITEM_LIST_LENGTH_FIELD: venue_seq_len
 
 
-#Dataloader&Sampler
-dataset: foursquare_NYC
+
 Use_CustomDataset: True  # 使用自定义的 FourSquareDataset 数据集类
 Use_CustomSampler: False
 repeatable: True  #进行阶段隔离
 NEG_PREFIX: "neg_"
 
-model: Mamba4POI
 
 # training settings
 epochs: 40
@@ -76,11 +73,12 @@ eval_args:
 
 
 # evalution settings
-metrics: ['Recall', 'MRR','NDCG']
+metrics: ['Recall', 'MRR','NDCG','ItemCoverage','AveragePopularity','TailPercentage']
 valid_metric: NDCG@10
-eval_batch_size: 1024
-weight_decay: 0.0
+eval_batch_size: 16
+weight_decay: 0
 topk: [1,5,10,20]
+tail_ratio: 0.15
 
 
 

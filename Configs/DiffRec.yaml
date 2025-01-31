@@ -1,0 +1,105 @@
+gpu_id: '0'
+log_wandb: True
+wandb_project: 'Mamba4POI'
+wandb_entity: "KactusJec" 
+wandb_run_name: 'T-DiffRec_TKY' 
+logging:
+  level: DEBUG
+
+# params for the diffusion
+noise_schedule: 'linear'        # (str) The schedule for noise generating: [linear, linear-var, cosine, binomial]
+noise_scale: 0.001              # (int) The scale for noise generating
+noise_min: 0.0005               # (int) Noise lower bound for noise generating
+noise_max: 0.005                # (int) Noise upper bound for noise generating
+sampling_noise: False           # (bool) Whether to use sampling noise
+sampling_steps: 0               # (int) Steps of the forward process during inference
+reweight: True                  # (bool) Assign different weight to different timestep or not
+mean_type: 'x0'                 # (str) MeanType for diffusion: [x0, eps]
+steps: 5                        # (int) Diffusion steps
+history_num_per_term: 10        # (int) The number of history items needed to calculate loss weight
+beta_fixed: True                # (bool) Whether to fix the variance of the first step to prevent overfitting
+
+# params for the model
+dims_dnn: [300]                 # (list of int) The dims for the DNN
+embedding_size: 10              # (int) Timestep embedding size
+mlp_act_func: 'tanh'            # (str) Activation function for MLP
+time-aware: True             # (bool) T-DiffRec or not
+w_max: 1                        # (int) The upper bound of the time-aware interaction weight
+w_min: 0.1                      # (int) The lower bound of the time-aware interaction weight
+
+
+# Save Directory Settings
+checkpoint_dir: 'SavedData'
+save_dataloaders: False
+dataloaders_save_path: ''  # 留空，代码会使用默认路径
+save_dataset: True         # 启用保存dataset功能
+dataset: foursquare_TKY
+dataset_save_path: 'SavedData/foursquare_TKY.pth' 
+seed: 42  # 设置一个默认种子
+
+num_workers: 4  
+
+#Dataset Settings
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: venue_id
+TIME_FIELD: timestamp
+LABEL_FIELD: label
+
+load_col:
+    inter: [user_id, venue_id,timestamp]
+    item: [venue_id,latitude, longitude]
+
+
+LIST_SUFFIX: "_list"
+MAX_ITEM_LIST_LENGTH: 128
+ITEM_LIST_LENGTH_FIELD: venue_seq_len
+
+
+#encoding: ISO-8859-1
+Use_CustomDataset: True  # 使用自定义的 FourSquareDataset 数据集类
+Use_CustomSampler: False
+repeatable: True  #进行阶段隔离
+NEG_PREFIX: "neg_"
+
+model: Mamba4POI
+
+# training settings
+epochs: 50
+train_batch_size: 1024
+learner: adam
+learning_rate: 0.001
+eval_step: 1
+stopping_step: 4
+single_spec: True
+
+# train_neg_sample_args: 
+#   distribution: "popularity"
+#   alpha: 0.5
+#   dynamic: False
+#   sample_num: 5
+train_neg_sample_args: ~ #CE
+
+eval_args:
+  order: TO 
+  spilt: 
+    RS: [0.7,0.1,0.3]
+  gourp_by: user_id
+  max_seq_len: 128 
+  mode:
+    val: full
+    test: full
+
+
+
+metrics: ['Recall', 'MRR','NDCG','ItemCoverage','AveragePopularity','TailPercentage']
+valid_metric: NDCG@10
+eval_batch_size: 1024
+weight_decay: 0
+topk: [1,5,10,20]
+tail_ratio: 0.15
+
+
+
+
+
+

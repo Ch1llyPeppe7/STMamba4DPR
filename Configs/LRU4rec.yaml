@@ -1,0 +1,84 @@
+# lrurec settings
+hidden_size: 64                 # (int) Number of features in the hidden state.
+n_layers: 2                  # (int) Number of Mamba layers.
+dropout_prob: 0.2            # (float) Dropout rate.
+loss_type: 'CE'                # (str) The type of loss function. Range in ['BPR', 'CE'].
+
+gpu_id: '0'
+
+log_wandb: True
+wandb_project: 'Mamba4POI'
+wandb_entity: "KactusJec" 
+wandb_run_name: 'LRU4Rec_GWL' 
+logging:
+  level: DEBUG
+# Save Directory Settings
+
+checkpoint_dir: 'SavedData'
+save_dataloaders: False
+dataloaders_save_path: ''  # 留空，代码会使用默认路径
+save_dataset: True         # 启用保存dataset功能
+dataset: gowalla
+dataset_save_path: 'SavedData/gowalla.pth'  
+seed: 42  # 设置一个默认种子
+train_neg_sample_args:  null
+
+
+#Dataset Settings
+USER_ID_FIELD: user_id
+ITEM_ID_FIELD: venue_id
+TIME_FIELD: timestamp
+LABEL_FIELD: label
+
+load_col:
+    inter: [user_id, venue_id,timestamp]
+    item: [venue_id,latitude, longitude]
+
+
+LIST_SUFFIX: "_list"
+MAX_ITEM_LIST_LENGTH: 128
+ITEM_LIST_LENGTH_FIELD: venue_seq_len
+
+
+#Dataloader&Sampler
+Use_CustomDataset: True 
+Use_CustomSampler: False
+repeatable: True  #进行阶段隔离
+NEG_PREFIX: "neg_"
+
+model: SASRec
+
+# training settings
+epochs: 40
+train_batch_size: 1024
+learner: adam
+learning_rate: 0.001
+eval_step: 1
+stopping_step: 4
+single_spec: True
+
+
+eval_args:
+  order: TO 
+  spilt: 
+    RS: [0.7,0.1,0.2]
+  gourp_by: user_id
+  max_seq_len: 128 
+  mode:
+    val: full
+    test: full
+
+
+
+
+metrics: ['Recall', 'MRR','NDCG','ItemCoverage','AveragePopularity','TailPercentage']
+valid_metric: NDCG@10
+eval_batch_size: 1024
+weight_decay: 0
+topk: [1,5,10,20]
+tail_ratio: 0.15
+
+
+
+
+

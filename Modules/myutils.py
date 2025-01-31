@@ -24,19 +24,6 @@ def UC_SVD(M,k,device):
     return U_k.cpu(),S_k.cpu(),Vt_k.T.cpu()
 
 
-def sinusoidal_position_encoding(locations,locdim,device):
-    locations=(locations/200).to(device)#<1km dot>0.4
-    d=int(locdim/2)
-
-    position_encoding = torch.zeros((locations.shape[0],locdim)).to(device)
-    for i in range(0, d, 2):
-        position_encoding[:, i] = torch.sin(locations[:,0] * (-i / d)**3)
-        position_encoding[:,i + 1] = torch.cos(locations[:,0] * (-(i + 1) / d)**3)
-        position_encoding[:, d+i] = torch.sin(locations[:,1] * (-i / d)**3)
-        position_encoding[:,d+i + 1] = torch.cos(locations[:,1] *(-(i + 1) / d)**3)
-
-    return position_encoding.cpu()
-
 
 
 def user_location_affinity_matrix(center_X,center_Y,width,height,device):
